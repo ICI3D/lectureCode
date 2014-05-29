@@ -15,12 +15,20 @@ dl <- list(measles=c(13.7,12.5,18),
 	rubella=c(6,6.7),
 	poliomyelitis=c(5.9,6.2))
 
+## dir <- '~/Dropbox/BiomathsMedPH/Lectures/Code/lectureCode/'
+setwd(dir)
+
+pdf('pvacc.pdf', w = 8, h=5)
 # Percent needed to vaccinate plot
-par(mfcol=c(1,1),mar=c(5,6,2,1),bty="L",lwd=2)
-curve(1-1/x,xlab=expression(R[0]),ylab=expression(p[v]),ylim=c(0,1),xlim=c(0,20),lwd=6)
+pcol <- 'white'
+par(mfcol=c(1,1),mar=c(9,9,2,1),bty="n",lwd=2, 'ps' = 30, mgp = c(7,2,0),
+    fg=pcol, col.axis=pcol, col.lab=pcol)
+curve(1-1/x,xlab=expression(R[0]),ylab=expression(p[v]),ylim=c(0,1),xlim=c(0,20),lwd=6, las = 1)
 sapply(1:length(dl),function(dis){
 	xx <- dl[[dis]]
 	yy <- 1-1/dl[[dis]]
-	points(xx,yy,pch=16,cex=1.8,col=dis+1)
-	text(15,dis/10,labels=names(dl)[dis],col=dis+1,pos=2,cex=2)
+	points(xx,yy,pch=16,cex=2.5,col=dis+1)
 })
+par('ps'=16)
+legend('bottomright', names(dl),col=1:length(dl)+1, pch = 19, bty = 'n', cex = 1.5)
+dev.off()
