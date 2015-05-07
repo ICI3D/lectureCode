@@ -1,4 +1,4 @@
-library(boot); library(parallel)
+library(car); library(parallel)
 ## ##################################################
 ## ## Plotting parameters
 ## fgcol <- 'white'
@@ -24,48 +24,98 @@ gaussianProposal <- function(params, sd = .1)
 
 unifProposal <- function(params, halfwidth = .1)
     runif(length(params), mean = params, min = params - halfwidth, max = params + halfwidth)
+logPrior <- function(prevalence) ## uniform prior from 0 to 1 on prevalence
+    dunif(prevalence, min = 0, max = 1, log = T)
+logLikelihood <- function(prevalence, data = list(size=size, sampPos=sampPos))
+    dbinom(data$sampPos, size = data$size, prob = prevalence, log = T)
+logPosterior <- function(prevalence, data = list(size=size, sampPos=sampPos))
+    logPrior(prevalence) + logLikelihood(prevalence, data)
+posterior <- function(prevalence, data = list(size=size, sampPos=sampPos))
+    exp(logPosterior(prevalence, data))
 
-logPrior <- function(params) ## uniform prior from 0 to 1 on prevalence
-    dunif(params, min = 0, max = 1, log = T)
-
-logLikelihood <- function(params, data = list(size=size, sampPos=sampPos))
-    dbinom(data$sampPos, size = data$size, prob = params, log = T)
-
-logPosterior <- function(params, data = list(size=size, sampPos=sampPos))
-    if(logPrior(params[1])==-Inf) {
-        return(-Inf)
-    }else{
-        return(logPrior(params) + logLikelihood(params, data))
-    }
-
-posterior <- function(params, data = list(size=size, sampPos=sampPos))
-    exp(logPosterior(params, data))
-
-par(mfrow = c(4,1))
+par(mfrow = c(2,2))
 curve(logPrior, 0, 1)
 curve(logLikelihood, 0, 1)
-curve(logPosterior, 0, 1)
+curve(logPosterior, 0,1)
 curve(posterior, 0, 1)
 
-runMCMC <- function(iterations, startvalue = runif(1), proposer = gaussianProposal){
+## Sample on a logit-probability scale
+runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)), 
+                          proposer = gaussianProposal, verbose = 0){
+    if(verbose > 0) browser()
     chain <- array(dim = c(iterations+1, length(startvalue)))
     chain[1,] <- startvalue
     for(ii in 1:iterations){
         proposal <- proposer(chain[ii,])
-        MHratio <- exp(logPosterior(proposal) - logPosterior(chain[ii,]))
+        MHratio <- exp(logPosterior(inv.logit(proposal)) - logPosterior(inv.logit(chain[ii,])))
         if(runif(1) < MHratio){
             chain[ii+1,] <- proposal
         }else{
             chain[ii+1,] <- chain[ii,]
         }
     }
-    return(chain)
+    return(inv.logit(chain))
 }
 
-
-chain1 <- runMCMC(1000)
-chain2 <- runMCMC(1000)
+runMCMC(10)
 
 nchains <- 4
-plot(runMCMC(1000), type = 'l', xlab = 'iteration', ylab = 'prevalence', col = rainbow(nchains)[1])
-for(ii in 2:nchains) lines(runMCMC(1000), col = rainbow(nchains)[ii])
+its <- 1000
+plot(0, type = 'n', xlab = 'iteration', ylab = 'prevalence', col = rainbow(nchains)[1], ylim = c(0,1), xlim = c(0, its))
+for(ii in 1:nchains) lines(runMCMC(1000), col = rainbow(nchains)[ii])
+
+defParList <- function() list(freq = F, xlab = '', ylab = '', xaxt = 'n',
+                              breaks = seq(0, 1 , by = .01), ylim = c(0,100),
+                              col = 'black', main = '') 
+
+mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal) {
+
+propCol <- gray(.4)
+par(mar = c(7,8,1,1))
+    parList$x <- chains
+    do.call(hist, parList)
+
+
+    x0 <- chains[nrow(chains),]
+    xseq <- seq(0,1, l = 1000)
+    yseq <- dnorm(xseq, x0, sd = .05)
+    xseqP <- c(xseq, rev(xseq))
+    yseqP <- c(-yseq * 12/max(yseq), rep(0, length(yseq)))
+par(xpd=NA)
+    polygon(xseqP, yseqP, col = propCol, border=NA)
+axis(1, at = seq(0,1, by = .1), line = 3)
+mtext('prevalence', 1, 5)
+mtext('proposal\ndistribution', 2, 2, srt=90, at = min(yseq)*.8, col = propCol)
+mtext('MCMC sample\nfrequency', 2, 2, srt=90, at = parList$ylim[2]/2)
+
+dbinom(
+    
+browser()
+3
+}
+
+mcmcHist(runMCMC(100))
+
+## ## Sample on a probability scale
+## runMCMC <- function(iterations, startvalue = runif(1), proposer = gaussianProposal, logitTr=T, verbose = 0){
+##     if(verbose > 0) browser()
+##     chain <- array(dim = c(iterations+1, length(startvalue)))
+##     chain[1,] <- startvalue
+##     for(ii in 1:iterations){
+##         proposal <- proposer(chain[ii,])
+##         MHratio <- exp(logPosterior(proposal) - logPosterior(chain[ii,]))
+##         if(runif(1) < MHratio){
+##             chain[ii+1,] <- proposal
+##         }else{
+##             chain[ii+1,] <- chain[ii,]
+##         }
+##     }
+##     return(chain)
+## }
+## logPosterior <- function(prevalence, data = list(size=size, sampPos=sampPos)) {
+##     if(logPrior(prevalence[1]==-Inf)) {
+##         return(-Inf) }else{
+##             logPrior(prevalence) + logLikelihood(prevalence, data)
+##         }
+## }
+
