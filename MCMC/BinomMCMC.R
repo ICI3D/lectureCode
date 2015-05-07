@@ -1,6 +1,6 @@
-library(boot); library(parallel)
-source('utilityFxns.R')
+library(boot); library(parallel); library(animation)
 setwd('~/Documents/R Repos/lectureCode/MCMC/')
+source('utilityFxns.R')
 ## ##################################################
 ## ## Plotting parameters
 ## fgcol <- 'white'
@@ -32,15 +32,15 @@ logPrior <- function(prevalence) ## uniform prior from 0 to 1 on prevalence
     dunif(prevalence, min = 0, max = 1, log = T)
 logLikelihood <- function(prevalence, data = list(size=size, sampPos=sampPos))
     dbinom(data$sampPos, size = data$size, prob = prevalence, log = T)
-logPosterior <- function(prevalence, data = list(size=size, sampPos=sampPos))
+logLikePrior <- function(prevalence, data = list(size=size, sampPos=sampPos))
     logPrior(prevalence) + logLikelihood(prevalence, data)
-posterior <- function(prevalence, data = list(size=size, sampPos=sampPos))
-    exp(logPosterior(prevalence, data))
+## posterior <- function(prevalence, data = list(size=size, sampPos=sampPos))
+##     exp(logPosterior(prevalence, data))
 
 par(mfrow = c(2,2))
 curve(logPrior, 0, 1)
 curve(logLikelihood, 0, 1)
-curve(logPosterior, 0,1)
+curve(logLikePrior, 0,1)
 curve(posterior, 0, 1)
 
 ## Sample on a logit-probability scale
@@ -53,7 +53,7 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
     for(ii in 1:iterations){
         ##browser()
         proposal <- proposer$rprop(chain[ii,])
-        MHratio <- exp(logPosterior(inv.logit(proposal)) - logPosterior(inv.logit(chain[ii,])))
+        MHratio <- exp(logLikePrior(inv.logit(proposal)) - logLikePrior(inv.logit(chain[ii,])))
         if(runif(1) < MHratio){
             chain[ii+1,] <- proposal
         }else{
@@ -63,7 +63,7 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
         if(!is.null(plotter)) {
             if(!is.null(plotNM)) {
                 if(!file.exists(file.path('Videos',plotNM))) dir.create(file.path('Videos',plotNM))
-                jpeg(paste0('Videos/',plotNM, '/', plotNM, formatC(ii, 4), '.jpeg'))
+                jpeg(paste0('Videos/',plotNM, '/', plotNM, formatC(ii, 4, flag='0'), '.jpeg'), quality = 300)
             }
             par(opar)
             plotter(inv.logit(chain), proposal = inv.logit(proposal), proposer = proposer, verbose = 0)#ii > 10)
@@ -73,8 +73,12 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
     return(inv.logit(chain))
 }
 
-runMCMC(400, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5), plotNM = 'test')
+runMCMC(2000, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5), plotNM = 'test.5-')
 
+
+defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n',
+                              breaks = seq(0, 1 , by = .01), ylim = c(0,100),
+                              col = 'black', main = '') 
 
 mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0) {
     propCol <- 'red'
@@ -82,7 +86,15 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     propColTr <- makeTransparent(propCol,50)
     par(mar = c(7,8,1,1))
     layout(matrix(1:2,2,1), h = c(2,1))
-    parList$x <- chains
+    parList <- within(parList, {
+        x <- chains
+        plot <- F
+    })
+    hh <- hist(chains, parList$breaks, plot = F)
+    parList <- within(parList, {
+        ylim <- c(0, ceiling(max(hh$counts)/100)*100)
+        plot <- T
+    })
     hh <- do.call(hist, parList)
     x0 <- chains[nrow(chains)-1,]
     xseq <- seq(.01,.99, l = 1000)
@@ -103,6 +115,8 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     mtext('MCMC sample\ndistribution', 2, 2, srt=90, at = parList$ylim[2]/2)
     par(mar = c(5,8,1,1))
     curve(posterior, 0, 1, ylab='', xlab='prevalence')
+    segments(x0, 0, x0, posterior(x0), col = 'blue')
+    segments(proposal, 0, proposal, posterior(proposal), col = 'brown', lty = 2-accepted)    
     axis(1, at = seq(0,1, by = .1))
     mtext('posterior', 2, 3, srt=90)#, at = parList$ylim[2]/2)
 }
@@ -113,10 +127,6 @@ its <- 1000
 par(mfrow=c(1,1))
 plot(0, type = 'n', xlab = 'iteration', ylab = 'prevalence', col = rainbow(nchains)[1], ylim = c(0,1), xlim = c(0, its))
 for(ii in 1:nchains) lines(runMCMC(1000), col = rainbow(nchains)[ii])
-
-defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n',
-                              breaks = seq(0, 1 , by = .01), ylim = c(0,100),
-                              col = 'black', main = '') 
 
 runMCMC(5, plotter=mcmcHist, verbose = 0)#, plotNM = 'test')
 
@@ -129,7 +139,7 @@ mcmcHist(runMCMC(100))
 ##     chain[1,] <- startvalue
 ##     for(ii in 1:iterations){
 ##         proposal <- proposer(chain[ii,])
-##         MHratio <- exp(logPosterior(proposal) - logPosterior(chain[ii,]))
+##         MHratio <- exp(logLikePrior(proposal) - logLikePrior(chain[ii,]))
 ##         if(runif(1) < MHratio){
 ##             chain[ii+1,] <- proposal
 ##         }else{
@@ -138,10 +148,14 @@ mcmcHist(runMCMC(100))
 ##     }
 ##     return(chain)
 ## }
-## logPosterior <- function(prevalence, data = list(size=size, sampPos=sampPos)) {
+## logLikePrior <- function(prevalence, data = list(size=size, sampPos=sampPos)) {
 ##     if(logPrior(prevalence[1]==-Inf)) {
 ##         return(-Inf) }else{
 ##             logPrior(prevalence) + logLikelihood(prevalence, data)
 ##         }
 ## }
 
+## start with just likelihood+ prior on bottom, then add sampling scheme above it
+## show posterior at the end (after calculation norm constant) to show that we got it right
+
+## show w/ informative prior
