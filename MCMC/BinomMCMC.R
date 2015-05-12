@@ -14,8 +14,8 @@ source('utilityFxns.R')
 ## ymax <- .15
 
 
-opar <- par('las'=1, bty = 'n', 'ps'=12) ## axes labels always written horizontal
-
+mainCol <- 'white'
+backCol <- 'black'
 size <- 100
 truePrev <- .3
 ## Sample from this distribution once (use 28 for powerpoint slides).
@@ -38,6 +38,9 @@ Prior <- function(x) exp(logPrior(x))
 Likelihood <- function(x) exp(logLikelihood(x))
 LikePrior <- function(x) exp(logLikePrior(x))
 
+
+opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
+            cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
 par(mfrow = c(2,2))
 curve(logPrior, 0, 1)
 curve(logLikelihood, 0, 1)
@@ -77,16 +80,12 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
 
 defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n',
                               breaks = seq(0, 1 , by = .01), ylim = c(0,100),
-                              col = 'white', main = '') 
+                              col = mainCol, main = '') 
 
-opar <- par(bg='black',fg='white', lwd=2, col.axis='white', col.lab='white', col = 'white', col.main='white', 'ps'=16, cex.axis=1.5, cex.lab=1.5)
-
-mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5) {
-    propCol <- 'yellow'
+mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5, propCol = 'yellow') {
     chains <- chains[!is.na(chains[,1]),,drop=F]
-    propColTr <- 'yellow' # makeTransparent(propCol,0)
     layout(matrix(1:4,4,1), h = c(1.8,1,1,1))
-    par(mar = c(9,18,1,1))
+    par(mar = c(9,18,1,1), opar, 'ps'=16)
     parList <- within(parList, {
         x <- chains
         plot <- F
@@ -105,7 +104,7 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     dep <- 5
     yseqP <- c(-yseq * scl, rep(0, length(yseq)))
     par(xpd=NA)
-    polygon(xseqP, yseqP-dep, col = propColTr, border=NA)
+    polygon(xseqP, yseqP-dep, col = propCol, border=NA)
     if(verbose>0) browser()
     accepted <- chains[nrow(chains),]==proposal
     segments(x0, -dep, x0, min(yseqP)-dep, col = 'dodger blue', lwd = lwd)
@@ -115,7 +114,7 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     mtext('proposal\ndistribution', 2, 3, srt=90, at = -(par('usr')[4] + par('usr')[3])/5 , col = propCol)
     mtext('MCMC sample\ndistribution', 2, 3, srt=90, at = parList$ylim[2]/2)
     ## 
-    par(mar = c(3,18,1,1), col.axis='white')
+    par(mar = c(3,18,1,1), col.axis=mainCol)
     curve(LikePrior, 0, 1, ylab='', xlab='', xaxt='n')
     segments(x0, 0, x0, LikePrior(x0), col = 'dodger blue', lwd = lwd)
     segments(proposal, 0, proposal, LikePrior(proposal), col = 'brown', lty = 2-accepted, lwd = lwd)
@@ -127,17 +126,17 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     mtext('likelihood', 2, 5, srt=90)#, at = parList$ylim[2]/2)
     ##
     par(mar = c(5,18,1,1))
-    curve(Prior, 0, 1, ylab='', xlab='prevalence', xaxt='n', col.lab='white',col.axis='white')
+    curve(Prior, 0, 1, ylab='', xlab='prevalence', xaxt='n', col.lab=mainCol,col.axis=mainCol)
     axis(1, at = seq(0,1, by = .1))
     mtext('prior', 2, 5, srt=90)#, at = parList$ylim[2]/2)
 }    
 
-nm <- 'test.avi'
+nm <- 'test.mov'
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
     ani.options(interval = 0.05, nmax = 300, ani.dev='png', ani.type='png')
-runMCMC(2000, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))
-}, video.name = nm, other.opts = "-b 1000k", ani.width = 800, ani.height = 800)  # higher bitrate, better quality
+runMCMC(20, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))
+}, video.name = nm, other.opts = "-b 1000k -pix_fmt yuv420p", ani.width = 800, ani.height = 800)  # higher bitrate, better quality
 
 runMCMC(10, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))#, plotNM = 'test.5-')
 
