@@ -28,22 +28,24 @@ gaussianProposal <- function(sd = .5, params = 1)
 unifProposal <- function(halfwidth = .1, params = 1)
     list(rprop = function(params) runif(1, min = params - halfwidth, max = params + halfwidth),
          dprop = function(x) dunif(x, min = params - halfwidth, max = params + halfwidth), halfwidth = halfwidth)
-logPrior <- function(prevalence) ## uniform prior from 0 to 1 on prevalence
-    dunif(prevalence, min = 0, max = 1, log = T)
+logUnifPrior <- function(prevalence) ## uniformative prior from 0 to 1 on prevalence
+        dunif(prevalence, min = 0, max = 1, log = T) 
+logBetaPrior <- function(prevalence, shape1 = 2, shape2 = 10) ## informative beta prior
+        dbeta(prevalence, shape1=shape1, shape2=shape2, log = T)
 logLikelihood <- function(prevalence, data = list(size=size, sampPos=sampPos))
     dbinom(data$sampPos, size = data$size, prob = prevalence, log = T)
-logLikePrior <- function(prevalence, data = list(size=size, sampPos=sampPos))
-    logPrior(prevalence) + logLikelihood(prevalence, data)
-Prior <- function(x) exp(logPrior(x))
+logLikePrior <- function(prevalence, data = list(size=size, sampPos=sampPos), logPriorFxn = logUnifPrior, ...)
+    logPriorFxn(prevalence, ...) + logLikelihood(prevalence, data)
+Prior <- function(x, logPriorFxn=logUnifPrior, ...) exp(logPriorFxn(x, ...))
 Likelihood <- function(x) exp(logLikelihood(x))
-LikePrior <- function(x) exp(logLikePrior(x))
-
+LikePrior <- function(x, logPriorFxn=logUnifPrior) exp(logLikePrior(x))
 
 opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
-par(mfrow = c(2,2))
-curve(logPrior, 0, 1)
-curve(logLikelihood, 0, 1)
+par(mfrow = c(2,2), mar = c(5,6,1,0))
+curve(Prior(x, logBetaPrior), 0, 1)
+#curve(Prior(x, logUnifPrior), 0, 1)
+curve(Likelihood, 0, 1)
 curve(logLikePrior, 0,1)
 curve(LikePrior, 0, 1)
 
@@ -77,22 +79,27 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
     return(inv.logit(chain))
 }
 
+lorange <- rgb(246,190,146, maxColorValue = 255)
+lpurp <- rgb(178,160,198, maxColorValue = 255)
+lblue <- rgb(185,221,231, maxColorValue = 255)
+lgreen <- 'light green'#rgb(214,228,189, maxColorValue = 255)
+defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n', border = NA,
+                              breaks = seq(0, 1 , by = .01), ylim = c(0,40),
+                              col = lgreen, main = '') 
 
-defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n',
-                              breaks = seq(0, 1 , by = .01), ylim = c(0,100),
-                              col = mainCol, main = '') 
-
-mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5, propCol = 'yellow') {
+mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5, 
+                     propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', lmar = 19) {
     chains <- chains[!is.na(chains[,1]),,drop=F]
-    layout(matrix(1:4,4,1), h = c(1.8,1,1,1))
-    par(mar = c(9,18,1,1), opar, 'ps'=16)
+marLine <- 12
+    layout(matrix(1:4,4,1), h = c(1.5,1,1,1))
+    par(mar = c(9,lmar,1,1), opar, 'ps'=18)
     parList <- within(parList, {
         x <- chains
         plot <- F
     })
     hh <- hist(chains, parList$breaks, plot = F)
     parList <- within(parList, {
-        ylim <- c(0, ceiling(max(hh$counts)/100)*100)
+        ylim <- c(0, ceiling(max(hh$counts)/40)*40)
         plot <- T
     })
     hh <- do.call(hist, parList)
@@ -100,43 +107,50 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
     xseq <- seq(.01,.99, l = 1000)
     yseq <- dnorm(logit(xseq), logit(x0), sd = proposer$sd) ##proposer$ddist(xseq, x0, sd = .1)
     xseqP <- c(xseq, rev(xseq))
-    scl <- 35/max(yseq)*ceiling(max(hh$counts)/100)
+    scl <- 25/max(yseq)*ceiling(max(hh$counts)/40)
     dep <- 5
     yseqP <- c(-yseq * scl, rep(0, length(yseq)))
     par(xpd=NA)
-    polygon(xseqP, yseqP-dep, col = propCol, border=NA)
+    polygon(xseqP, yseqP-dep, col = makeTransparent(propDistCol, alpha = 50), border=NA)
     if(verbose>0) browser()
     accepted <- chains[nrow(chains),]==proposal
-    segments(x0, -dep, x0, min(yseqP)-dep, col = 'dodger blue', lwd = lwd)
-    segments(proposal, -dep, proposal, -dep-scl*dnorm(logit(proposal), logit(x0), proposer$sd), col = 'brown', lty = 2-accepted, lwd = lwd)
+    segments(x0, -dep, x0, min(yseqP)-dep, col = curCol, lwd = lwd)
+    segments(proposal, -dep, proposal, -dep-scl*dnorm(logit(proposal), logit(x0), proposer$sd), col = propCol, lty = 2-accepted, lwd = lwd)
     ##axis(1, at = seq(0,1, by = .1), line = 3)
     axis(1, at = seq(0,1, by = .1), pos = -dep, labels=F)
-    mtext('proposal\ndistribution', 2, 3, srt=90, at = -(par('usr')[4] + par('usr')[3])/5 , col = propCol)
-    mtext('MCMC sample\ndistribution', 2, 3, srt=90, at = parList$ylim[2]/2)
+    mtext('proposal\ndistribution', 2, marLine, srt=90, at = -(par('usr')[4] + par('usr')[3])/5 , col = propDistCol, adj = .5)
+    mtext('MCMC sample\ndistribution', 2, marLine, srt=90, at = parList$ylim[2]/2, col=lgreen, adj = .5)
     ## 
-    par(mar = c(3,18,1,1), col.axis=mainCol)
-    curve(LikePrior, 0, 1, ylab='', xlab='', xaxt='n')
-    segments(x0, 0, x0, LikePrior(x0), col = 'dodger blue', lwd = lwd)
-    segments(proposal, 0, proposal, LikePrior(proposal), col = 'brown', lty = 2-accepted, lwd = lwd)
+    par(mar = c(3,lmar,1,1), col.axis=mainCol)
+    curve(LikePrior, 0, 1, ylab='', xlab='', xaxt='n', lwd = 3)
+    segments(x0, 0, x0, LikePrior(x0), col = curCol, lwd = lwd)
+    segments(proposal, 0, proposal, LikePrior(proposal), col = propCol, lty = 2-accepted, lwd = lwd)
     axis(1, at = seq(0,1, by = .1), labels=F)
-    mtext('likelihood x prior', 2, 5, srt=90)#, at = parList$ylim[2]/2)
+    mtext('likelihood\nx\nprior', 2, marLine, srt=90, adj = .5)#, at = parList$ylim[2]/2)
+    legend('right', leg =c('current', 'proposed (accepted)', 'proposed (rejected)'), lwd = lwd, col = c(curCol, propCol, propCol),
+           lty = c(1,1,2), bty = 'n', cex = 1.6, seg.len = 3)
     ## 
-    curve(Likelihood, 0, 1, ylab='', xlab='', xaxt='n')
+    curve(Likelihood, 0, 1, ylab='', xlab='', xaxt='n', col = lpurp, lwd = 3)
     axis(1, at = seq(0,1, by = .1), labels=F)
-    mtext('likelihood', 2, 5, srt=90)#, at = parList$ylim[2]/2)
+    mtext('likelihood', 2, marLine, adj = .5, srt=90, col = lpurp)#, at = parList$ylim[2]/2)
     ##
-    par(mar = c(5,18,1,1))
-    curve(Prior, 0, 1, ylab='', xlab='prevalence', xaxt='n', col.lab=mainCol,col.axis=mainCol)
+    par(mar = c(6,lmar,1,1))
+    curve(Prior, 0, 1, ylab='', lwd = 3, 
+          xlab='prevalence', xaxt='n', col.lab=mainCol,col.axis=mainCol, ylim = c(0, 1.2), yaxt='n', col=lorange)
     axis(1, at = seq(0,1, by = .1))
-    mtext('prior', 2, 5, srt=90)#, at = parList$ylim[2]/2)
+    axis(2, at = c(0,1))
+    mtext('prior', 2, marLine, adj = .5, srt=90, col=lorange)        #, at = parList$ylim[2]/2)
 }    
 
 nm <- 'test.mov'
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
-    ani.options(interval = 0.05, nmax = 300, ani.dev='png', ani.type='png')
-runMCMC(20, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))
-}, video.name = nm, other.opts = "-b 1000k -pix_fmt yuv420p", ani.width = 800, ani.height = 800)  # higher bitrate, better quality
+    ani.options(interval = 0.03, nmax = 300, ani.dev='png', ani.type='png')
+runMCMC(800, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))
+}, video.name = nm, other.opts = "-b 1000k -pix_fmt yuv420p", ani.width = 800, ani.height = 600)  # higher bitrate, better quality
+
+
+runMCMC(1, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))
 
 runMCMC(10, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=.5))#, plotNM = 'test.5-')
 
@@ -146,7 +160,6 @@ par(mfrow=c(1,1))
 plot(0, type = 'n', xlab = 'iteration', ylab = 'prevalence', col = rainbow(nchains)[1], ylim = c(0,1), xlim = c(0, its))
 for(ii in 1:nchains) lines(runMCMC(1000), col = rainbow(nchains)[ii])
 
-runMCMC(5, plotter=mcmcHist, verbose = 0)#, plotNM = 'test')
 
 mcmcHist(runMCMC(100))
 
