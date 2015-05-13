@@ -42,12 +42,12 @@ LikePrior <- function(x, logPriorFxn=logUnifPrior, ...) exp(logLikePrior(x, logP
 
 opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
-par(mfrow = c(2,2), mar = c(5,6,1,0))
-curve(Prior(x, logBetaPrior), 0, 1)
-#curve(Prior(x, logUnifPrior), 0, 1)
-curve(Likelihood, 0, 1)
-curve(logLikePrior, 0,1)
-curve(LikePrior, 0, 1)
+## par(mfrow = c(2,2), mar = c(5,6,1,0))
+## curve(Prior(x, logBetaPrior), 0, 1)
+## #curve(Prior(x, logUnifPrior), 0, 1)
+## curve(Likelihood, 0, 1)
+## curve(logLikePrior, 0,1)
+## curve(LikePrior, 0, 1)
 
 ## Sample on a logit-probability scale
 runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
@@ -68,13 +68,9 @@ runMCMC <- function(iterations, startvalue = runif(1, logit(.01), logit(.99)),
         }
         ## PLOTTING
         if(!is.null(plotter)) {
-            if(!is.null(plotNM)) {
-                if(!file.exists(file.path('stills',plotNM))) dir.create(file.path('stills',plotNM))
-                png(paste0('stills/',plotNM, '/', plotNM, formatC(ii, 4, flag='0'), '.png'), width = 800, height = 600)
-            }
-            par(opar)
-            plotter(inv.logit(chain), proposal = inv.logit(proposal), proposer = proposer, verbose = 0, logPriorFxn=logPriorFxn)#ii > 10)
-            if(!is.null(plotNM)) graphics.off()
+            if(!is.null(plotNM)) if(!file.exists(file.path('stills',plotNM))) dir.create(file.path('stills',plotNM))
+            plotter(inv.logit(chain), proposal = inv.logit(proposal), proposer = proposer, plotNM=plotNM,
+                    verbose = 0, logPriorFxn=logPriorFxn, ii = ii)
         }
     }
     return(inv.logit(chain))
@@ -88,71 +84,78 @@ defParList <- function() list(freq = T, xlab = '', ylab = '', xaxt = 'n', border
                               breaks = seq(0, 1 , by = .01), ylim = c(0,40),
                               col = lgreen, main = '') 
 
-mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5, 
-                     propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', lmar = 19, logPriorFxn=logUnifPrior) {
+mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, proposal = NA, verbose = 0, lwd = 5, plotNM=NULL, 
+                     propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', lmar = 19, logPriorFxn=logUnifPrior, ii=1) {
     chains <- chains[!is.na(chains[,1]),,drop=F]
     marLine <- 12
     for(bb in 1:2) { ## show 1st frame without proposal, then 2nd with proposal
+        if(!is.null(plotNM)) png(paste0('stills/',plotNM, '/', plotNM, '-',
+                                        formatC(ii, 4, flag='0'),'-',bb,'.png'), width = 800, height = 600)
         layout(matrix(1:4,4,1), h = c(1.5,1,1,1))
-        par(mar = c(9,lmar,1,1), opar, 'ps'=18)
-        parList <- within(parList, {
-            if(bb==1) x <- chains[1:(nrow(chains)-1),] else x <- chains
-            plot <- F
-        })
-        hh <- hist(chains, parList$breaks, plot = F)
-        parList <- within(parList, {
-            ylim <- c(0, ceiling(max(hh$counts)/40)*40)
-            plot <- T
-        })
-        hh <- do.call(hist, parList)
-        x0 <- chains[nrow(chains)-1,]
-        xseq <- seq(.01,.99, l = 1000)
-        yseq <- dnorm(logit(xseq), logit(x0), sd = proposer$sd) ##proposer$ddist(xseq, x0, sd = .1)
-        xseqP <- c(xseq, rev(xseq))
-        scl <- 25/max(yseq)*ceiling(max(hh$counts)/40)
-        dep <- 5
-        yseqP <- c(-yseq * scl, rep(0, length(yseq)))
-        par(xpd=NA)
-        polygon(xseqP, yseqP-dep, col = makeTransparent(propDistCol, alpha = 100), border=NA)
-        if(verbose>0) browser()
-        accepted <- chains[nrow(chains),]==proposal
-        segments(x0, -dep, x0, min(yseqP)-dep, col = curCol, lwd = lwd)
-        if(bb>1) segments(proposal, -dep, proposal, -dep-scl*dnorm(logit(proposal), logit(x0), proposer$sd), 
-                          col = propCol, lty = 2-accepted, lwd = lwd)
-        ##axis(1, at = seq(0,1, by = .1), line = 3)
-        axis(1, at = seq(0,1, by = .1), pos = -dep, labels=F)
-        mtext('proposal\ndistribution', 2, marLine, srt=90, at = -(par('usr')[4] + par('usr')[3])/5 , col = propDistCol, adj = .5)
-        mtext('MCMC sample\ndistribution', 2, marLine, srt=90, at = parList$ylim[2]/2, col=lgreen, adj = .5)
-        ## 
-        par(mar = c(3,lmar,1,1), col.axis=mainCol)
-        curve(LikePrior(x, logPriorFxn = logPriorFxn), 0, 1, ylab='', xlab='', xaxt='n', lwd = 3)
-        segments(x0, 0, x0, LikePrior(x0), col = curCol, lwd = lwd)
-        if(bb>1) segments(proposal, 0, proposal, LikePrior(proposal), col = propCol, lty = 2-accepted, lwd = lwd)
-        axis(1, at = seq(0,1, by = .1), labels=F)
-        mtext('likelihood\nx\nprior', 2, marLine, srt=90, adj = .5)#, at = parList$ylim[2]/2)
-        legend('right', leg =c('current', 'proposed (accepted)', 'proposed (rejected)'), lwd = lwd, col = c(curCol, propCol, propCol),
-               lty = c(1,1,2), bty = 'n', cex = 1.6, seg.len = 3)
-        ## 
-        curve(Likelihood, 0, 1, ylab='', xlab='', xaxt='n', col = lpurp, lwd = 3)
-        axis(1, at = seq(0,1, by = .1), labels=F)
-        mtext('likelihood', 2, marLine, adj = .5, srt=90, col = lpurp)#, at = parList$ylim[2]/2)
-        ##
-        par(mar = c(6,lmar,1,1))
-                                        #browser()
-        curve(Prior(x, logPriorFxn = logPriorFxn), 0, 1, ylab='', lwd = 3, 
-              xlab='prevalence', xaxt='n', col.lab=mainCol,col.axis=mainCol, col=lorange)
-        axis(1, at = seq(0,1, by = .1))
-                                        #axis(2, at = c(0,1))
-        mtext('prior', 2, marLine, adj = .5, srt=90, col=lorange)        #, at = parList$ylim[2]/2)
-    }
-}    
+        par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
+            cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
+            par(mar = c(9,lmar,1,1), 'ps'=18)
+            parList <- within(parList, {
+                if(bb==1) x <- chains[1:(nrow(chains)-1),] else x <- chains
+                plot <- F
+            })
+            ## MCMC histogram
+            hh <- hist(chains, parList$breaks, plot = F)
+            parList <- within(parList, {
+                ylim <- c(0, ceiling(max(hh$counts)/40)*40)
+                plot <- T
+            })
+            hh <- do.call(hist, parList)
+            x0 <- chains[nrow(chains)-1,]
+            xseq <- seq(.01,.99, l = 1000)
+            yseq <- dnorm(logit(xseq), logit(x0), sd = proposer$sd)
+            xseqP <- c(xseq, rev(xseq))
+            scl <- 25/max(yseq)*ceiling(max(hh$counts)/40)
+            dep <- 5
+            yseqP <- c(-yseq * scl, rep(0, length(yseq)))
+            ## Proposal distribution
+            par(xpd=NA)
+            polygon(xseqP, yseqP-dep, col = makeTransparent(propDistCol, alpha = 100), border=NA)
+            if(verbose>0) browser()
+            accepted <- chains[nrow(chains),]==proposal
+            if(accepted) ltyProp <- 1 else ltyProp <- 3
+            segments(x0, -dep, x0, min(yseqP)-dep, col = curCol, lwd = lwd)
+            if(bb>1) segments(proposal, -dep, proposal, -dep-scl*dnorm(logit(proposal), logit(x0), proposer$sd), 
+                              col = propCol, lty = ltyProp, lwd = lwd)
+            axis(1, at = seq(0,1, by = .1), pos = -dep, labels=F)
+            mtext('proposal\ndistribution', 2, marLine, srt=90, at = -(par('usr')[4] + par('usr')[3])/5 , col = propDistCol, adj = .5)
+            mtext('MCMC sample\ndistribution', 2, marLine, srt=90, at = parList$ylim[2]/2, col=lgreen, adj = .5)
+            ## Likelihood X Prior
+            par(mar = c(3,lmar,1,1), col.axis=mainCol)
+            curve(LikePrior(x, logPriorFxn = logPriorFxn), 0, 1, ylab='', xlab='', xaxt='n', lwd = 3)
+            segments(x0, 0, x0, LikePrior(x0, logPriorFxn = logPriorFxn), col = curCol, lwd = lwd)
+            if(bb>1) segments(proposal, 0, proposal, LikePrior(proposal, logPriorFxn = logPriorFxn), col = propCol, lty = ltyProp, lwd = lwd)
+            axis(1, at = seq(0,1, by = .1), labels=F)
+            mtext('likelihood\nx\nprior', 2, marLine, srt=90, adj = .5)
+            legend('right', leg =c('current', 'proposed (accepted)', 'proposed (rejected)'), lwd = lwd, col = c(curCol, propCol, propCol),
+                   lty = c(1,1,3), bty = 'n', cex = 1.6, seg.len = 3)
+            ## Likelihood
+            curve(Likelihood, 0, 1, ylab='', xlab='', xaxt='n', col = lpurp, lwd = 3)
+            axis(1, at = seq(0,1, by = .1), labels=F)
+            mtext('likelihood', 2, marLine, adj = .5, srt=90, col = lpurp)
+            ## Prior
+            par(mar = c(6,lmar,1,1))
+            curve(Prior(x, logPriorFxn = logPriorFxn), 0, 1, ylab='', lwd = 3, 
+                  xlab='prevalence', xaxt='n', col.lab=mainCol,col.axis=mainCol, col=lorange)
+            axis(1, at = seq(0,1, by = .1))
+            mtext('prior', 2, marLine, adj = .5, srt=90, col=lorange) 
+            if(!is.null(plotNM)) graphics.off()
+        }
+    }    
 
 ## Run 3 chains, save the first 10 frames of each
-nits <- 300
+nits <- 3000
 sdvec <- c(.05, .2, 2)
+ff <- 'logBetaPrior'
+ii <- 2
 for(ff in c('logUnifPrior','logBetaPrior')) {
     for(ii in 1:length(sdvec)) {
-        set.seed(5)
+        set.seed(4)
         nm <- paste0('movies/',ff,'-',sdvec[ii], '.mov')
         if(file.exists(nm)) file.remove(nm)
         saveVideo({
@@ -160,7 +163,7 @@ for(ff in c('logUnifPrior','logBetaPrior')) {
             runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), logPriorFxn = get(ff))
         }, video.name = nm, other.opts = "-b 1000k -pix_fmt yuv420p", ani.width = 800, ani.height = 600)
         set.seed(5)
-        test <- runMCMC(7, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]),
+        test <- runMCMC(7, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.25),
                         plotNM = paste0(ff,'-',sdvec[ii]))
     }
 }
