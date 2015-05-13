@@ -24,10 +24,10 @@ sampPrev <- sampPos/size
 
 gaussianProposal <- function(sd = .5, params = 1)
     list(rprop = function(params) rnorm(1, mean = params, sd = sd),
-         dprop = function(x) dnorm(x, mean = params, sd = sd), sd = sd)
+         dprop = function(x) dnorm(x, mean = params, sd = sd), sd = sd, type='norm')
 unifProposal <- function(halfwidth = .1, params = 1)
     list(rprop = function(params) runif(1, min = params - halfwidth, max = params + halfwidth),
-         dprop = function(x) dunif(x, min = params - halfwidth, max = params + halfwidth), halfwidth = halfwidth)
+         dprop = function(x) dunif(x, min = params - halfwidth, max = params + halfwidth), halfwidth = halfwidth, type='unif')
 logUnifPrior <- function(prevalence) ## uniformative prior from 0 to 1 on prevalence
     dunif(prevalence, min = 0, max = 1, log = T) 
 logBetaPrior <- function(prevalence, shape1 = 8, shape2 = 40) ## informative beta prior
@@ -113,7 +113,7 @@ mcmcHist <- function(chains, parList=defParList(), proposer = gaussianProposal, 
             hh <- do.call(hist, parList)
             x0 <- chains[nrow(chains)-1,]
             xseq <- seq(.01,.99, l = 1000)
-            if('sd' %in% names(formals(proposer))) {
+            if('norm'==proposer$type) {
                 yseq <- dnorm(logit(xseq), logit(x0), sd = proposer$sd)
                 propDens <- dnorm(logit(proposal), logit(x0), proposer$sd)
             }else{
@@ -195,7 +195,7 @@ mcmcHistTrace <- function(chains, parList=defParList(), proposer = gaussianPropo
             hh <- do.call(hist, parList)
             x0 <- chains[nrow(chains)-1,]
             xseq <- seq(.01,.99, l = 1000)
-            if('sd' %in% names(formals(proposer))) {
+            if('norm'==proposer$type) {
                 yseq <- dnorm(logit(xseq), logit(x0), sd = proposer$sd)
                 propDens <- dnorm(logit(proposal), logit(x0), proposer$sd)
             }else{

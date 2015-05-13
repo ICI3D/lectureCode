@@ -14,6 +14,7 @@ saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
     runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidth=hw), logPriorFxn = get(ff))
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
+
 ## Stills
 set.seed(5)
 test <- runMCMC(7, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidth=hw), 
@@ -22,6 +23,7 @@ test <- runMCMC(7, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidt
 set.seed(4)
 test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidth=hw), 
                 noProps=T, plotNM = paste0(ffp,'-',sdvec[ii]), iiShow=3000)
+
 set.seed(4)
 test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidth=hw), 
                 noProps=T, plotNM = paste0(ffp,'-',sdvec[ii]), iiShow=3000, burn = 400)
@@ -29,8 +31,10 @@ test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfw
 
 ## Gaussian proposer
 sdvec <- c(.05, .2, 2)
-## ff <- 'logUnifPrior'
-## ii <- 2
+ff <- 'logUnifPrior'
+ii <- 2
+nits <- 30
+
 for(ff in c('logUnifPrior','logBetaPrior')) {
     for(ii in 1:length(sdvec)) {
         set.seed(4)
@@ -49,19 +53,21 @@ for(ff in c('logUnifPrior','logBetaPrior')) {
 set.seed(4)
 test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), 
                 noProps=T, plotNM = paste0(ff,'-',sdvec[ii]), iiShow=3000)
+
 set.seed(4)
-test <- runMCMC(nits, plotter=mcmcHist, verbose = 2, proposer=gaussianProposal(sd=sdvec[ii]), 
+test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), 
                 noProps=T, plotNM = paste0(ff,'-',sdvec[ii]), iiShow=3000, burn = 400)
 
+## Trace plots
 ff <- 'logUnifPrior'
 ffp <- paste0(ff, '-Gaus')
 ii <- 2
+nits <- 1000
 nm <- paste0(ffp,'-trace',sdvec[ii],'.mov')
 if(file.exists(nm)) file.remove(nm)
-
 saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
-    runMCMC(30, plotter=mcmcHistTrace, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]))                
+    runMCMC(nits, plotter=mcmcHistTrace, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]))                
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
 
 
