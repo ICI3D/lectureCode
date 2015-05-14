@@ -2,12 +2,13 @@ setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('BinomMCMC.R')
 
 ## Uniform proposer
+sdvec <- c(.05, .2, 2)
 ff <- 'logUnifPrior'
 ffp <- paste0(ff, '-UnifProp')
 nits <- 3000
 hw <- .5
 ## Movie
-nm <- paste0('movies/',ffp,'-',sdvec[ii], '.mov')
+nm <- paste0('movies/',ffp,'-',hw, '.mov')
 if(file.exists(nm)) file.remove(nm)
 set.seed(4)
 saveVideo({
@@ -28,13 +29,10 @@ set.seed(4)
 test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=unifProposal(halfwidth=hw), 
                 noProps=T, plotNM = paste0(ffp,'-',sdvec[ii]), iiShow=3000, burn = 400)
 
-
 ## Gaussian proposer
-sdvec <- c(.05, .2, 2)
 ff <- 'logUnifPrior'
 ii <- 2
 nits <- 30
-
 for(ff in c('logUnifPrior','logBetaPrior')) {
     for(ii in 1:length(sdvec)) {
         set.seed(4)
@@ -70,6 +68,7 @@ saveVideo({
     runMCMC(nits, plotter=mcmcHistTrace, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.8)) 
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
 
+## Trace 2 chains
 
 runMCMC(100, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.8)) 
 

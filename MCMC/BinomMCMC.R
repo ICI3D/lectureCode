@@ -42,6 +42,7 @@ LikePrior <- function(x, logPriorFxn=logUnifPrior, ...) exp(logLikePrior(x, logP
 
 opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
+dev.off()
 ## par(mfrow = c(2,2), mar = c(5,6,1,0))
 ## curve(Prior(x, logBetaPrior), 0, 1)
 ## #curve(Prior(x, logUnifPrior), 0, 1)
@@ -247,7 +248,7 @@ mcmcHistTrace <- function(chains, parList=defParList(), proposer = gaussianPropo
 }    
 
 
-    ## Trace
+## Trace
 tracePlot <- function(chainList) {
     xmax <- ceiling(nrow(chains)/100)*100
     plot(0, type = 'n', xlab = '', ylab = '', col = rainbow(1)[1], ylim = c(0,1), xlim = c(0, xmax), mgp = c(3,3,0))
