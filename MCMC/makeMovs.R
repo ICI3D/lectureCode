@@ -62,15 +62,18 @@ test <- runMCMC(nits, plotter=mcmcHist, verbose = 0, proposer=gaussianProposal(s
 ff <- 'logUnifPrior'
 ffp <- paste0(ff, '-Gaus')
 ii <- 2
-nits <- 1000
-nm <- paste0(ffp,'-trace',sdvec[ii],'.mov')
+nits <- 6000
+nm <- paste0('movies/',ffp,'-trace',sdvec[ii],'.mov')
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
-    ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
-    runMCMC(nits, plotter=mcmcHistTrace, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]))                
+    ani.options(interval = 0.003, nmax = 300, ani.dev='png', ani.type='png')
+    runMCMC(nits, plotter=mcmcHistTrace, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.8)) 
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
 
 
+runMCMC(100, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.8)) 
+
+    
 nchains <- 4
 its <- 1000
 par(mfrow=c(1,1))

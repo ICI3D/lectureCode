@@ -237,13 +237,25 @@ mcmcHistTrace <- function(chains, parList=defParList(), proposer = gaussianPropo
             mtext('prevalence', 1, 6, adj = .5)
             ## Trace
             xmax <- ceiling(nrow(chains)/100)*100
-            plot(0, type = 'n', xlab = 'iteration', ylab = '', col = rainbow(1)[1], ylim = c(0,1), xlim = c(0, xmax), mgp = c(3,3,0))
+            plot(0, type = 'n', xlab = '', ylab = '', col = rainbow(1)[1], ylim = c(0,1), xlim = c(0, xmax), mgp = c(3,3,0))
             lines(chains, col = lgreen)
             mtext('prevalence\nMCMC chain', 2, marLine, adj = .5, srt=90)
+            mtext('iteration', 1, 6, adj = .5)
             if(!is.null(plotNM)) graphics.off()
         }
     }
 }    
+
+
+    ## Trace
+tracePlot <- function(chainList) {
+    xmax <- ceiling(nrow(chains)/100)*100
+    plot(0, type = 'n', xlab = '', ylab = '', col = rainbow(1)[1], ylim = c(0,1), xlim = c(0, xmax), mgp = c(3,3,0))
+    lines(chains, col = lgreen)
+    mtext('prevalence\nMCMC chain', 2, marLine, adj = .5, srt=90)
+    mtext('iteration', 1, 6, adj = .5)
+    if(!is.null(plotNM)) graphics.off()
+}
 
 ## ## Sample on a probability scale
 ## runMCMC <- function(iterations, startvalue = runif(1), proposer = gaussianProposal, logitTr=T, verbose = 0){
