@@ -39,7 +39,7 @@ SImod <- function(tt, yy, parms) with(parms, {
     return(list(deriv))
 })
 
-sampleEpidemic <- function(simDat, tseq = seq(1980, 2010, by = 2), numSamp = rep(150, length(tseq)), verbose=0) {
+sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(150, length(tseq)), verbose=0) {
     if(verbose>0) browser()
     simDat$I <- rowSums(simDat[, Is])
     prev_at_sample_times <- simDat[simDat$time %in% tseq, 'I']
@@ -58,3 +58,106 @@ plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c
 obsDat <- sampleEpidemic(simDat, verbose = 0)
 points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
 arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
+
+## Log-Likelihood
+llikelihood <- function(parms = disease_params(), obsDat, verbose = 0) {
+    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
+    simDat$I <- rowSums(simDat[, Is])
+    if(verbose > 5) browser()
+    lls <- dbinom(obsDat$numPos, obsDat$numSamp, prob = simDat$I[simDat$time %in% obsDat$time], log = T)
+    return(sum(lls))
+}
+llikelihood(obsDat=obsDat)
+
+## Log-Prior (assume uninformative)
+lprior <- function(parms=disease_params()) with(parms, {
+    lp <- 0
+    return(lp)
+})
+
+llikePrior <- function(fit.params=NULL, ## parameters to fit
+                       ref.params = disease_params(), ## reference parameters
+                       obsDat, verbose = 0) { ## observed data
+    parms <- within(ref.params, { ## subs fitting parameters into reference parameter vector
+        for(nm in names(fit.params)) assign(nm, as.numeric(fit.params[nm]))
+        rm(nm)
+    })
+    llikelihood(parms, obsDat=obsDat, verbose = verbose) + lprior(parms)
+}
+llikePrior(obsDat=obsDat)
+
+logParms <- function(fit.params) {
+    fit.params <- log(fit.params)
+    names(fit.params) <- paste0('log',names(fit.params))
+    return(fit.params)
+}
+unlogParms <- function(fit.params) {
+    fit.params <- exp(fit.params)
+    names(fit.params) <- sub('log','', names(fit.params))
+    return(fit.params)
+}
+unlogParms(logParms(c(alpha = 3, Beta=.3)))
+
+initBounds <- data.frame(rbind( ## for initial conditions
+    c(log(.01),log(2))
+   ,c(log(.7), log(100))
+   ,c(log(1),log(1/10))))
+colnames(initBounds) <- c('lower','upper')
+rownames(initBounds) <- c('Beta','alpha','progRt')
+class(initBounds[,2]) <- class(initBounds[,3]) <- 'numeric'
+initBounds
+
+initRand <- function(fit.params) {
+    fit.params <- logParms(fit.params)
+    tempnm <- names(fit.params)
+    for(nm in tempnm) fit.params[nm] <- runif(1, min = initBounds[rownames(initBounds)==nm, 'lower'], 
+                                              max =  initBounds[row.names(initBounds)==nm, 'upper'])
+    return(unlogParms(fit.params))
+}
+initRand(c(alpha = 3, Beta = 1))
+
+## MCMC
+mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=sdProps),
+                        randInit = T, niter = 100, verbose=0) {
+    if(verbose>0) browser()
+    if(randInit) current.params <- initRand(current.params)
+    ii <- 2
+    accept <- 0
+    curVal <- llikePrior(current.params, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
+    out <- matrix(NA, nr = niter, nc=length(current.params)+1)
+    out[1,] <- c(current.params, nll = -curVal)
+}
+
+mcmcSampler(list(alpha = 1, Beta = 1), obsDat=obsDat, verbose = 6)
+
+multiv.proposer <- function(covar, blockLS = list(rownames(covar))) {
+    nblocks <- length(blockLS)
+    on <- 0
+    return(function(current) {
+        proposal <- current
+        onBlock <- blockLS[[on + 1]]
+        proposal[onBlock] <- current[onBlock] + rmnorm(1, mean = 0, varcov = covar[onBlock,onBlock])
+        proposal <- as.vector(proposal) #otherwise is a matrix
+        names(proposal) <- names(current)
+        on <<- (on+1) %% nblocks
+        proposal
+    })
+}
+
+block.proposer <- function(sdProps) return(function(current) {
+    nfitted <- length(sdProps)
+    current + rnorm(nfitted, mean = 0, sd = sdProps)
+})
+
+sequential.proposer <- function(sdProps) {
+    nfitted <- length(sdProps)
+    on <- 0
+    return(function(current) {
+  	proposal <- current
+  	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
+  	on <<- (on+1) %% nfitted
+  	proposal
+    })
+}
+
+
