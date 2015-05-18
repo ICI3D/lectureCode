@@ -1,4 +1,4 @@
-library(boot); library(parallel); library(animation)
+library(boot); library(parallel); library(animation); library(coda)
 setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('utilityFxns.R')
 ## ##################################################
@@ -249,16 +249,52 @@ mcmcHistTrace <- function(chains, parList=defParList(), proposer = gaussianPropo
 
 
 ## Trace
-tracePlot <- function(chainList) {
-    xmax <- ceiling(nrow(chains)/100)*100
+tracePlot <- function(chainList, upTo = 10^4, plotNM=NULL, marLine = 12, lmar=20, ps = 25, bb = 1, parList=defParList(), alpha = 150) {
+    if(!is.null(plotNM)) if(!file.exists(file.path('stills',plotNM))) dir.create(file.path('stills',plotNM))
+    if(!is.null(plotNM)) png(paste0('stills/',plotNM, '/', plotNM, '-', formatC(ii, 4, flag='0'),'-',bb,'.png'), width = 800*resScl, height = 600*resScl)
+    layout(matrix(1:2,2,1), h = c(1.5,1))
+    par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
+        cex.axis=1.2, cex.lab=1.2, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,0))
+    par(mar = c(8,lmar,1,1), 'ps'=ps)
+    nchains <- length(chainList)
+    ## subset chains
+    for(ii in 1:nchains) chainList[[ii]] <- chainList[[ii]][1:min(upTo, nrow(chainList[[ii]])), ]
+    mostIts <- max(unlist(lapply(chainList, length)))
+    xmax <- ceiling(mostIts/100)*100
+    ## Histograms (shaded)
+    histLS <- list()
+    for(ii in 1:nchains) histLS[[ii]] <- hist(chainList[[ii]], seq(0, 1 , by = .025), plot = F)
+    maxCount <- max(unlist(lapply(histLS, function(x) x$counts)))
+    ylim <- c(0, ceiling(maxCount/40)*40)    
+    plot(0, type = 'n', xlab = '', ylab = '', ylim = ylim, xlim = c(0, 1), mgp = c(3,3,0), xaxt='n')
+            axis(1, at = seq(0,1, by = .1), mgp = c(3,3,0))
+    mtext('MCMC sample\ndistribution', 2, marLine, srt=90, at = 0, col=lgreen, adj = .5)
+    histDens <- function(histObj, col) with(histObj, {
+        xs <- rep(breaks,each=2)
+        xs <- xs[-c(1,length(xs))]
+        xs <- c(xs, rev(xs))
+        ys <- rep(counts, each = 2)
+        ys <- c(ys, rep(0, length(ys)))
+        polygon(xs, ys, col = col, border = NA)
+    })
+    for(ii in 1:nchains) histDens(histLS[[ii]], col = makeTransparent(rainbow(nchains)[ii], alpha = alpha))
+    mtext('prevalence', 1, 6, adj = .5)
+    ## Trace Plots
+    par(mar = c(8,lmar,1,1), col.axis=mainCol)
     plot(0, type = 'n', xlab = '', ylab = '', col = rainbow(1)[1], ylim = c(0,1), xlim = c(0, xmax), mgp = c(3,3,0))
-    lines(chains, col = lgreen)
+    for(ii in 1:nchains) lines(chainList[[ii]], col = rainbow(nchains)[ii])
     mtext('prevalence\nMCMC chain', 2, marLine, adj = .5, srt=90)
     mtext('iteration', 1, 6, adj = .5)
+    ## Gelman-Rubin
+    mcCH <- chainList
+    for(ii in 1:nchains) mcCH[[ii]] <- mcmc(mcCH[[ii]])
+    mcCH <- as.mcmc(mcCH)
+    gdag <- gelman.diag(mcCH)
+    mtext(paste0('Gelman-Rubin Diagnostic = ', signif(gdag$psrf[,1],4)), 3, -3)
     if(!is.null(plotNM)) graphics.off()
 }
 
-## ## Sample on a probability scale
+## ## sample on a probability scale
 ## runMCMC <- function(iterations, startvalue = runif(1), proposer = gaussianProposal, logitTr=T, verbose = 0){
 ##     if(verbose > 0) browser()
 ##     chain <- array(dim = c(iterations+1, length(startvalue)))

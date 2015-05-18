@@ -7,6 +7,8 @@ ff <- 'logUnifPrior'
 ffp <- paste0(ff, '-UnifProp')
 nits <- 3000
 hw <- .5
+
+
 ## Movie
 nm <- paste0('movies/',ffp,'-',hw, '.mov')
 if(file.exists(nm)) file.remove(nm)
@@ -70,13 +72,18 @@ saveVideo({
 
 ## Trace 2 chains
 
-runMCMC(100, verbose = 0, proposer=gaussianProposal(sd=sdvec[ii]), startvalue = logit(.8)) 
+chainLs <- list()
+nchains <- 8
+for(ii in 1:nchains) {
+     chainLs[[ii]] <- runMCMC(5000, verbose = 0, proposer=gaussianProposal(sd=.05))
+}
 
-    
-nchains <- 4
-its <- 1000
-par(mfrow=c(1,1))
-plot(0, type = 'n', xlab = 'iteration', ylab = 'prevalence', col = rainbow(nchains)[1], ylim = c(0,1), xlim = c(0, its))
-for(ii in 1:nchains) lines(runMCMC(1000), col = rainbow(nchains)[ii])
+nm <- paste0('movies/',ffp,'-traceMultiChains',sdvec[ii],'.mov')
+if(file.exists(nm)) file.remove(nm)
+saveVideo({
+    ani.options(interval = 0.06, nmax = 300, ani.dev='png', ani.type='png')
+    for(jj in seq(10, 4000, by = 20))   tracePlot(chainLs[1:4], jj, alpha = 75)#, plotNM='test')
+}, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
+
 
 
