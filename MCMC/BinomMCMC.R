@@ -13,9 +13,6 @@ source('utilityFxns.R')
 ## cx <- 1.2 ## ps/12 
 ## ymax <- .15
 
-resScl <- 1.5 ## how many more pixels than 800x600
-mainCol <- 'white'
-backCol <- 'black'
 size <- 100
 truePrev <- .3
 ## Sample from this distribution once (use 28 for powerpoint slides).

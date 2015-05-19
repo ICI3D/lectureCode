@@ -1,4 +1,7 @@
-library(deSolve); library(ggplot2)
+library(deSolve); library(ggplot2); library(MASS)
+setwd('~/Documents/R Repos/lectureCode/MCMC/')
+source('utilityFxns.R')
+
 opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2))
 
@@ -99,11 +102,11 @@ unlogParms <- function(fit.params) {
 unlogParms(logParms(c(alpha = 3, Beta=.3)))
 
 initBounds <- data.frame(rbind( ## for initial conditions
-    c(log(.01),log(2))
-   ,c(log(.7), log(100))
-   ,c(log(1),log(1/10))))
+    c(log(.01),log(2)) ## beta
+   ,c(log(.7), log(100)) ## alpha
+   ,c(log(1),log(1/10)))) ## progRt
 colnames(initBounds) <- c('lower','upper')
-rownames(initBounds) <- c('Beta','alpha','progRt')
+rownames(initBounds) <- c('logBeta','logalpha','logprogRt')
 class(initBounds[,2]) <- class(initBounds[,3]) <- 'numeric'
 initBounds
 
@@ -116,19 +119,146 @@ initRand <- function(fit.params) {
 }
 initRand(c(alpha = 3, Beta = 1))
 
-## MCMC
+
 mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=sdProps),
-                        randInit = T, niter = 100, verbose=0) {
-    if(verbose>0) browser()
+                        plotter = plotterTS, randInit = T, niter = 100, nburn = 0, verbose=0, plotNM=NULL) {
+    if(verbose>2) browser()
     if(randInit) current.params <- initRand(current.params)
-    ii <- 2
+    vv <- 2 ## mcmc iteration
     accept <- 0
     curVal <- llikePrior(current.params, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
     out <- matrix(NA, nr = niter, nc=length(current.params)+1)
     out[1,] <- c(current.params, nll = -curVal)
+    colnames(out) <- c(names(current.params), 'nll')
+    max_index <- dim(out)[1]
+    last.it <- 0
+    while(vv <= max_index) {
+        if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
+        proposal <- unlogParms(proposer(logParms(current.params)))
+        propVal <- llikePrior(proposal, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
+        lmh <- propVal - curVal ## likelihood ratio = log likelihood difference
+        if (is.na(lmh)) { ## if NA, print informative info but don't accept it
+            print(list(lmh=lmh, proposal=exp(proposal), vv=vv, seed=seed))
+        } else { ## if it's not NA then do acception/rejection algorithm
+            if (verbose > 1) print( c(lmh=lmh, propVal=propVal) )
+            ## if MHR >= 1 or a uniform random # in [0,1] is <= MHR, accept otherwise reject
+            if ( (lmh >= 0) | (runif(1,0,1) <= exp(lmh)) ) {
+                current.params <- proposal
+                if (vv>nburn) accept <- accept + 1 #only track acceptance after burn-in
+                curVal <- propVal
+            }
+        }
+        out[vv, ] <- c(current.params, nll=curVal)
+        vv <- vv+1
+        ## if(plotFitted & lmh!=-Inf) do.call(plotout, args=within(plotArgs, {objresult <- res}))
+##            if(!is.null(plotNM)) 
+##png(paste0(plotNM,'.png'), width = 800*resScl, height = 600*resScl)
+## browser()
+if(vv > 30) {
+par(opar)
+plotter(out, vv, ref.params=ref.params, obsDat=obsDat)
+}
+##          do.call(plotter, args=within(plotArgs, {curState <- out[vv,]}))
+  ##          if(!is.null(plotNM)) dev.off()
+
+    }
+    if(!is.null(plotNM)) graphics.off()
+    aratio <- accept/((vv-nburn))
+    colnames(out) <- c(names(current.params), 'nll')
+    return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
-mcmcSampler(list(alpha = 1, Beta = 1), obsDat=obsDat, verbose = 6)
+mcmcSampler(c(alpha = 1, Beta = 1), obsDat=obsDat, verbose = 0, niter=30, proposer=sequential.proposer(sdProps=c(1,1)),
+            plotter=plotterParmDens)
+
+plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat) {
+    browser()
+    out
+    out <- out[1:(vv-1), colnames(out) !='nll']
+    fit.params <- out[nrow(out),]
+    parnms <- colnames(out)
+    parms <- within(ref.params, { ## subs fitting parameters into reference parameter vector
+        for(nm in parnms) assign(nm, as.numeric(fit.params[nm]))
+        rm(nm)
+    })
+
+    ## simulate model
+    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
+    simDat$I <- rowSums(simDat[, Is])
+    browser()
+
+    layout(matrix(c(5,2,4,3,1,4), 3, 2), w = c(.6,1), h = c(.6,1,1))
+    ## Pardensity
+    plot(0,0, type = 'n', xlab = parnms[1], ylab = parnms[2], main = '')
+    ## Hist X
+    hist(rnorm(10))
+    ## Hist Y
+    hist(rnorm(10))
+
+    layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.6), h = c(.6,1,1))
+    xbreaks <- seq(xlim[1], xlim[2], l=25)
+    ybreaks <- seq(ylim[1], ylim[2], l=25)
+    xhist  <-  hist(out[,1], plot=FALSE, breaks = xbreaks)
+    yhist  <-  hist(out[,2], plot=FALSE, breaks = ybreaks)
+    xlim <- range(out[,1])
+    ylim <- range(out[,2])
+    top  <-  max(c(xhist$counts, yhist$counts))
+    par(mar=c(5,5,1,1))
+    bump <- 5
+    z <- kde2d(out[,1], out[,2])
+    log <- ''
+    nlevs <- 15
+    cols <- apply(colorRamp(c('black','red','orange','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
+    plot(0,0, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
+    axis(1, at = pretty(xlim, 5))
+    axis(2, at = pretty(ylim, 5))
+    .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs), col = cols)
+    mtext(parnms[1], 1, 5)
+    mtext(parnms[2], 2, 5)
+    par(mar=c(5,bump,1,1)) 
+    barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA, log = log)
+    par(new=T)
+    plot(0,0, type='n',ylim = ylim, axes=F, xlab='',ylab='',main='')
+    axis(2, at = pretty(ylim, 5), labels = F)
+    par(mar=c(bump,5,1,1))
+    barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA, log = log)
+    par(new=T)
+    plot(0,0, type='n',xlim = xlim, axes=F, xlab='',ylab='',main='')
+    axis(1, at = pretty(xlim, 5), labels = F)
+    par(mar=c(2,9,1,1))
+    ## Time Series
+    plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red')
+    ## add data
+    points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
+    arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
+    mtext('prevalence', 2, 5)
+
+}
+
+plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL, obsDat) {
+    parms <- within(ref.params, { ## subs fitting parameters into reference parameter vector
+        for(nm in names(fit.params)) assign(nm, as.numeric(fit.params[nm]))
+        rm(nm)
+    })
+    ## simulate model
+    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
+    simDat$I <- rowSums(simDat[, Is])
+    plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
+    ## add data
+    points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
+    arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
+}
+
+sequential.proposer <- function(sdProps) {
+    nfitted <- length(sdProps)
+    on <- 0
+    return(function(current) {
+  	proposal <- current
+  	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
+  	on <<- (on+1) %% nfitted
+  	proposal
+    })
+}
 
 multiv.proposer <- function(covar, blockLS = list(rownames(covar))) {
     nblocks <- length(blockLS)
@@ -149,15 +279,6 @@ block.proposer <- function(sdProps) return(function(current) {
     current + rnorm(nfitted, mean = 0, sd = sdProps)
 })
 
-sequential.proposer <- function(sdProps) {
-    nfitted <- length(sdProps)
-    on <- 0
-    return(function(current) {
-  	proposal <- current
-  	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
-  	on <<- (on+1) %% nfitted
-  	proposal
-    })
-}
+
 
 
