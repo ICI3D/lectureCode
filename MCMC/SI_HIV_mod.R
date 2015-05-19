@@ -134,7 +134,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     last.it <- 0
     while(vv <= max_index) {
         if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
-        proposal <- unlogParms(proposer(logParms(current.params)))
+        proposal <- unlogParms(proposer$fxn(logParms(current.params)))
         propVal <- llikePrior(proposal, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
         lmh <- propVal - curVal ## likelihood ratio = log likelihood difference
         if (is.na(lmh)) { ## if NA, print informative info but don't accept it
@@ -156,7 +156,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
         ## browser()
         if(!is.null(plotter)) {
             par(opar)
-            plotter(out, vv, ref.params=ref.params, obsDat=obsDat)
+            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer)
         }
         ##          do.call(plotter, args=within(plotArgs, {curState <- out[vv,]}))
         ##          if(!is.null(plotNM)) dev.off()
@@ -168,8 +168,8 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
-plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0,
-                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.05,3), log = 'xy', bump = 5, nlevs = 15,
+plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL,
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.005,3), log = 'xy', bump = 5, nlevs = 15,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     out <- out[1:(vv-1), colnames(out) !='nll']
     fit.params <- out[nrow(out),]
@@ -183,7 +183,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
     simDat$I <- rowSums(simDat[, Is])
 
-    layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.4), h = c(.6,1,1))
+    layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
     par(opar, 'ps'=ps) 
     par(mar=c(8,lmar,1,1))
     ## Bivariate density
@@ -228,19 +228,65 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         yhist  <-  hist(out[,2], plot=FALSE, breaks = ybreaks)
         top  <-  max(c(xhist$counts, yhist$counts))
         ##
-
+    ## Y
     par(mar=c(8,bump,1,1)) 
     barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA)
     par(new=T)
     plot(0,0, type='n',ylim = ylim, axes=F, xlab='',ylab='',main='')
     axis(2, at = yticks, labels = F)
+    
+    ## Y proposal
+    valSeq <- seq(ylim[1],ylim[2], l = 1000)
+    densSeq <- dnorm(valSeq, out[nrow(out),2], sd = proposer$sdProps[2])
+    ## propDens <- dnorm(logit(proposal), logit(y0), proposer$sd)
+    valSeqP <- c(valSeq, rev(valSeq))
+    scl <- .1
+    dep <- .1
+    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))
+    ## Proposal distribution
+    par(new=T)
+    plot(0,0, type='n',ylim = ylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
+    par(xpd=NA)
+    polygon(densSeqP-dep, valSeqP, col = makeTransparent('yellow', alpha = 100), border=NA)
+    par(xpd=T)
+    ## if(verbose>0) browser()
+    ## accepted <- chains[nrow(chains),]==proposal
+    ## if(accepted) ltyProp <- 1 else ltyProp <- 3
+    ## segments(x0, -dep, x0, min(densSeqP)-dep, col = curCol, lwd = lwd)
+    ## if(bb>1) segments(proposal, -dep, proposal, -dep-scl*propDens, 
+    ##                   col = propCol, lty = ltyProp, lwd = lwd)
+
+    ## X
     par(mar=c(bump,lmar,1,1))
     barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA)
     par(new=T)
     plot(0,0, type='n',xlim = xlim, axes=F, xlab='',ylab='',main='')
     axis(1, at = xticks, labels = F)
-    par(mar=c(6,lmar,1,1))
+
+    ## X proposal
+    valSeq <- seq(xlim[1],xlim[2], l = 1000)
+    densSeq <- dnorm(valSeq, out[nrow(out),1], sd = proposer$sdProps[1])
+    ## propDens <- dnorm(logit(proposal), logit(x0), proposer$sd)
+    valSeqP <- c(valSeq, rev(valSeq))
+    scl <- .1
+    dep <- .1
+    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))
+    ## Proposal distribution
+    par(new=T)
+    plot(0,0, type='n',xlim = xlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
+    par(xpd=NA)
+    polygon(valSeqP, densSeqP-dep, col = makeTransparent('yellow', alpha = 100), border=NA)
+    par(xpd=T)
+    ## if(verbose>0) browser()
+    ## accepted <- chains[nrow(chains),]==proposal
+    ## if(accepted) ltyProp <- 1 else ltyProp <- 3
+    ## segments(x0, -dep, x0, min(densSeqP)-dep, col = curCol, lwd = lwd)
+    ## if(bb>1) segments(proposal, -dep, proposal, -dep-scl*propDens, 
+    ##                   col = propCol, lty = ltyProp, lwd = lwd)
+
+                
     ## Time Series
+    par(mar=c(6,lmar,1,1))
     plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red', lwd = par()$lwd, mgp = c(4,3,0))
     ## add data
     points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 4)
@@ -265,12 +311,13 @@ plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL,
 sequential.proposer <- function(sdProps) {
     nfitted <- length(sdProps)
     on <- 0
-    return(function(current) {
+    return(list(sdProps = sdProps,
+                fxn = function(current) {
   	proposal <- current
   	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
   	on <<- (on+1) %% nfitted
   	proposal
-    })
+    }))
 }
 
 multiv.proposer <- function(covar, blockLS = list(rownames(covar))) {

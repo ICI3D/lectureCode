@@ -95,7 +95,7 @@ set.seed(4)
 saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=c(.15,.15)),
-                plotter = plotterParmDens, randInit = T, niter = 200, nburn = 0, verbose=0, plotNM=NULL)
+                plotter = plotterParmDens, randInit = T, niter = 50, nburn = 0, verbose=0, plotNM=NULL)
 },
           video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
