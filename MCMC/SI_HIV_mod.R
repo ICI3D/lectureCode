@@ -154,7 +154,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
 ##            if(!is.null(plotNM)) 
 ##png(paste0(plotNM,'.png'), width = 800*resScl, height = 600*resScl)
 ## browser()
-if(vv > 30) {
+if(vv > 10) {
 par(opar)
 plotter(out, vv, ref.params=ref.params, obsDat=obsDat)
 }
@@ -168,12 +168,9 @@ plotter(out, vv, ref.params=ref.params, obsDat=obsDat)
     return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
-mcmcSampler(c(alpha = 1, Beta = 1), obsDat=obsDat, verbose = 0, niter=30, proposer=sequential.proposer(sdProps=c(1,1)),
-            plotter=plotterParmDens)
-
-plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat) {
-    browser()
-    out
+plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0,
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.05,2), log = 'xy', bump = 5, nlevs = 15,
+                            yparnm = expression(beta), xparnm=expression(alpha)) {
     out <- out[1:(vv-1), colnames(out) !='nll']
     fit.params <- out[nrow(out),]
     parnms <- colnames(out)
@@ -181,58 +178,46 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         for(nm in parnms) assign(nm, as.numeric(fit.params[nm]))
         rm(nm)
     })
-
+    if(verbose > 7) browser()
     ## simulate model
     simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
     simDat$I <- rowSums(simDat[, Is])
-    browser()
-
-    layout(matrix(c(5,2,4,3,1,4), 3, 2), w = c(.6,1), h = c(.6,1,1))
-    ## Pardensity
-    plot(0,0, type = 'n', xlab = parnms[1], ylab = parnms[2], main = '')
-    ## Hist X
-    hist(rnorm(10))
-    ## Hist Y
-    hist(rnorm(10))
-
-    layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.6), h = c(.6,1,1))
-    xbreaks <- seq(xlim[1], xlim[2], l=25)
-    ybreaks <- seq(ylim[1], ylim[2], l=25)
+    z <- kde2d(out[,1], out[,2])
+    layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.4), h = c(.6,1,1))
+    par(opar, 'ps'=ps) 
+    xr <- range(c(out[,1], xlim))
+    yr <- range(c(out[,2], ylim))
+    xbreaks <- seq(xr[1], xr[2], l=25)
+    ybreaks <- seq(yr[1], yr[2], l=25)
     xhist  <-  hist(out[,1], plot=FALSE, breaks = xbreaks)
     yhist  <-  hist(out[,2], plot=FALSE, breaks = ybreaks)
-    xlim <- range(out[,1])
-    ylim <- range(out[,2])
     top  <-  max(c(xhist$counts, yhist$counts))
-    par(mar=c(5,5,1,1))
-    bump <- 5
-    z <- kde2d(out[,1], out[,2])
-    log <- ''
-    nlevs <- 15
+    par(mar=c(5,lmar,1,1))
     cols <- apply(colorRamp(c('black','red','orange','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-    plot(0,0, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
-    axis(1, at = pretty(xlim, 5))
-    axis(2, at = pretty(ylim, 5))
-    .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs), col = cols)
-    mtext(parnms[1], 1, 5)
-    mtext(parnms[2], 2, 5)
+    plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
+    axis(1, at = pretty(xlim, 4), mgp=c(4,2,0))
+    axis(2, at = pretty(ylim, 4), mgp=c(4,2,0))
+    .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = xlim, ylim = ylim), col = cols)
+    points(out, col = gray(.6), cex = .5, pch = 16)
+    mtext(xparnm, 1, marLine-3, cex = 1.5)
+    mtext(yparnm, 2, marLine, cex = 1.5)
     par(mar=c(5,bump,1,1)) 
-    barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA, log = log)
+    barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA)
     par(new=T)
     plot(0,0, type='n',ylim = ylim, axes=F, xlab='',ylab='',main='')
-    axis(2, at = pretty(ylim, 5), labels = F)
-    par(mar=c(bump,5,1,1))
-    barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA, log = log)
+    axis(2, at = pretty(ylim, 4), labels = F)
+    par(mar=c(bump,lmar,1,1))
+    barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA)
     par(new=T)
     plot(0,0, type='n',xlim = xlim, axes=F, xlab='',ylab='',main='')
-    axis(1, at = pretty(xlim, 5), labels = F)
-    par(mar=c(2,9,1,1))
+    axis(1, at = pretty(xlim, 4), labels = F)
+    par(mar=c(6,lmar,1,1))
     ## Time Series
-    plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red')
+    plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red', lwd = par()$lwd, mgp = c(4,3,0))
     ## add data
-    points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
+    points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 4)
     arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
-    mtext('prevalence', 2, 5)
-
+    mtext('prevalence', 2, marLine)
 }
 
 plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL, obsDat) {
