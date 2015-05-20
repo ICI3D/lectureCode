@@ -134,7 +134,9 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     last.it <- 0
     while(vv <= max_index) {
         if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
-        proposal <- unlogParms(proposer$fxn(logParms(current.params)))
+        proposal <- proposer$fxn(logParms(current.params))
+        onpar <- proposal$onpar
+        proposal <- unlogParms(proposal$proposal)
         propVal <- llikePrior(proposal, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
         lmh <- propVal - curVal ## likelihood ratio = log likelihood difference
         if (is.na(lmh)) { ## if NA, print informative info but don't accept it
@@ -156,7 +158,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
         ## browser()
         if(!is.null(plotter)) {
             par(opar)
-            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer)
+            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer, proposal = proposal, onpar=onpar)
         }
         ##          do.call(plotter, args=within(plotArgs, {curState <- out[vv,]}))
         ##          if(!is.null(plotNM)) dev.off()
@@ -168,11 +170,14 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
-plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL,
-                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.01,3), log = 'xy', bump = 5, nlevs = 15,
+plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL, onpar = onpar,
+                            proposal = NA, propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue',
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.01,1.5), log = 'xy', bump = 5, nlevs = 15,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
-    out <- out[1:(vv-1), colnames(out) !='nll']
-    fit.params <- out[nrow(out),]
+    out <- out[!is.na(out[,1]), colnames(out) !='nll', drop=F]
+    newParms <- out[nrow(out) , colnames(out) !='nll']
+    lastParms <- fit.params <- out[nrow(out)-1,]
+    out <- out[1:(nrow(out)-1),,drop=F]
     parnms <- colnames(out)
     parms <- within(ref.params, { ## subs fitting parameters into reference parameter vector
         for(nm in parnms) assign(nm, as.numeric(fit.params[nm]))
@@ -189,16 +194,16 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     par(mar=c(8,lmar,1,1))
     ## Bivariate density
 
-nlevs <- 40
+    nlevs <- 40
     cols <- apply(colorRamp(c('black','red','orange','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-     plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
+    plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
     if(grepl('x',log)) {
-        xticks <- axTicks(1, axp = c(xlim, 3), log = T)
+        xticks <- axTicks(1, axp = c(xlim, 2), log = T)
     }else{
         xticks <- pretty(xlim, 5)
     }
     if(grepl('y',log)) {
-        yticks <- axTicks(2, axp = c(ylim, 3), log = T)
+        yticks <- axTicks(2, axp = c(ylim, 2), log = T)
     }else{
         yticks <- pretty(ylim, 5)
     }
@@ -206,98 +211,89 @@ nlevs <- 40
     axis(2, at = yticks, mgp=c(4,2,0))
     outOriginal <- out
 
+    Lout <- out
+    Lxlim <- xlim
+    Lxticks <- xticks
+    Lylim <- ylim
+    Lyticks <- yticks
+    Lxr <- xr <- range(c(out[,1], xlim))
+    Lyr <- yr <- range(c(out[,2], ylim))
+
     if(grepl('x',log)) {
-        out[,1] <- log(out[,1])
-        xlim <- log(xlim)
-        xticks <- log(xticks)
+        Lout[,1] <- log(out[,1])
+        Lxlim <- log(xlim)
+        Lxticks <- log(xticks)
+        Lxr <- log(xr)
     }
     if(grepl('y',log)) {
-        out[,2] <- log(out[,2])
-        ylim <- log(ylim)
-        yticks <- log(yticks)        
+        Lout[,2] <- log(out[,2])
+        Lylim <- log(ylim)
+        Lyticks <- log(yticks)        
+        Lyr <- log(yr)
     }
     if(nrow(out)>20) {
-        z <- kde2d(out[,1], out[,2], lims = c(xlim, ylim), h = .2)
+        z <- kde2d(Lout[,1], Lout[,2], lims = c(Lxlim, Lylim), h = .2)
         if(grepl('x',log)) z$x <- exp(z$x)
         if(grepl('y',log)) z$y <- exp(z$y)
-        .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = xlim, ylim = ylim), col = cols)
+        .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = Lxlim, ylim = Lylim), col = cols)
     }
     if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
     mtext(xparnm, 1, marLine-3, cex = 1.5)
     mtext(yparnm, 2, marLine+3, cex = 1.5)
 
     ## Marginal Histograms
-    xr <- range(c(out[,1], xlim))
-    yr <- range(c(out[,2], ylim))
-        xbreaks <- seq(xr[1], xr[2], l=25)
-        ybreaks <- seq(yr[1], yr[2], l=25)
-        xhist  <-  hist(out[,1], plot=FALSE, breaks = xbreaks)
-        yhist  <-  hist(out[,2], plot=FALSE, breaks = ybreaks)
-        top  <-  max(c(xhist$counts, yhist$counts))
-        ##
+    xbreaks <- seq(Lxr[1], Lxr[2], l=25)
+    ybreaks <- seq(Lyr[1], Lyr[2], l=25)
+    xhist  <-  hist(Lout[,1], plot=FALSE, breaks = xbreaks)
+    yhist  <-  hist(Lout[,2], plot=FALSE, breaks = ybreaks)
+    top  <-  max(c(xhist$counts, yhist$counts))
+
     ## Y
-    par(mar=c(8,bump,1,1)) 
-    barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA)
-    par(new=T)
-    plot(0,0, type='n',ylim = ylim, axes=F, xlab='',ylab='',main='')
-    axis(2, at = yticks, labels = F)
-    
-    ## Y proposal
-    valSeq <- seq(ylim[1],ylim[2], l = 1000)
-    densSeq <- dnorm(valSeq, out[nrow(out),2], sd = proposer$sdProps[2])
-    ## propDens <- dnorm(logit(proposal), logit(y0), proposer$sd)
-    valSeqP <- c(valSeq, rev(valSeq))
     scl <- .1
     dep <- .1
-    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))
-    ## Proposal distribution
+    par(mar=c(8,bump+2,1,1)) 
+    barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA)
     par(new=T)
-    plot(0,0, type='n',ylim = ylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
+    plot(0,0, type='n',ylim = Lylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
+    axis(2, at = Lyticks, labels = F)
+    valSeq <- seq(Lylim[1],Lylim[2], l = 1000)
+    densSeq <- dnorm(valSeq, log(lastParms[2]), sd = proposer$sdProps[2])
+    propDens <- dnorm(log(proposal[2]), log(lastParms[2]), proposer$sdProps[2])
+    valSeqP <- c(valSeq, rev(valSeq))
+    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
     par(xpd=NA)
-    polygon(densSeqP-dep, valSeqP, col = makeTransparent('yellow', alpha = 100), border=NA)
+    polygon(densSeqP, valSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
+    accepted <- newParms[2]==proposal[2]
+    if(accepted) ltyProp <- 1 else ltyProp <- 3
+    segments(max(densSeqP), log(lastParms[2]), min(densSeqP), log(lastParms[2]), col = curCol, lwd = 3)
+    if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]), col = propCol, lty = ltyProp, lwd = 3)
     par(xpd=T)
-    ## if(verbose>0) browser()
-    ## accepted <- chains[nrow(chains),]==proposal
-    ## if(accepted) ltyProp <- 1 else ltyProp <- 3
-    ## segments(x0, -dep, x0, min(densSeqP)-dep, col = curCol, lwd = lwd)
-    ## if(bb>1) segments(proposal, -dep, proposal, -dep-scl*propDens, 
-    ##                   col = propCol, lty = ltyProp, lwd = lwd)
 
     ## X
     par(mar=c(bump,lmar,1,1))
     barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA)
     par(new=T)
-    plot(0,0, type='n',xlim = xlim, axes=F, xlab='',ylab='',main='')
-    axis(1, at = xticks, labels = F)
-
-    ## X proposal
-    valSeq <- seq(xlim[1],xlim[2], l = 1000)
-    densSeq <- dnorm(valSeq, out[nrow(out),1], sd = proposer$sdProps[1])
-    ## propDens <- dnorm(logit(proposal), logit(x0), proposer$sd)
+    plot(0,0, type='n',xlim = Lxlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
+    axis(1, at = Lxticks, labels = F)
+    valSeq <- seq(Lxlim[1],Lxlim[2], l = 1000)
+    densSeq <- dnorm(valSeq, log(lastParms[1]), sd = proposer$sdProps[1])
+    propDens <- dnorm(log(proposal[1]), log(lastParms[1]), proposer$sdProps[1])
     valSeqP <- c(valSeq, rev(valSeq))
-    scl <- .1
-    dep <- .1
-    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))
-    ## Proposal distribution
-    par(new=T)
-    plot(0,0, type='n',xlim = xlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
+    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
     par(xpd=NA)
-    polygon(valSeqP, densSeqP-dep, col = makeTransparent('yellow', alpha = 100), border=NA)
+    polygon(valSeqP, densSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
+    accepted <- newParms[2]==proposal[2]
+    if(accepted) ltyProp <- 1 else ltyProp <- 3
+    segments(log(lastParms[1]), max(densSeqP), log(lastParms[1]), min(densSeqP), col = curCol, lwd = 3)
+    if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
     par(xpd=T)
-    ## if(verbose>0) browser()
-    ## accepted <- chains[nrow(chains),]==proposal
-    ## if(accepted) ltyProp <- 1 else ltyProp <- 3
-    ## segments(x0, -dep, x0, min(densSeqP)-dep, col = curCol, lwd = lwd)
-    ## if(bb>1) segments(proposal, -dep, proposal, -dep-scl*propDens, 
-    ##                   col = propCol, lty = ltyProp, lwd = lwd)
-
-                
+    
     ## Time Series
     par(mar=c(6,lmar,1,1))
     plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red', lwd = par()$lwd, mgp = c(4,3,0))
     ## add data
     points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 4)
-    arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
+    arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3, lwd = 3)
     mtext('HIV\nprevalence', 2, marLine+ 7, adj = .5)
 }
 
@@ -318,12 +314,12 @@ plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL,
 sequential.proposer <- function(sdProps) {
     nfitted <- length(sdProps)
     on <- 0
-    return(list(sdProps = sdProps,
+    return(list(sdProps = sdProps, 
                 fxn = function(current) {
   	proposal <- current
   	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
   	on <<- (on+1) %% nfitted
-  	proposal
+  	list(proposal=proposal, onpar=on+1)
     }))
 }
 
