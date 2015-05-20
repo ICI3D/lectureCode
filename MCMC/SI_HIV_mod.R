@@ -1,4 +1,4 @@
-library(deSolve); library(ggplot2); library(MASS)
+library(deSolve); library(ggplot2); library(MASS); library(sfsmisc); library(mnormt)
 setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('utilityFxns.R')
 
@@ -121,7 +121,7 @@ initRand(c(alpha = 3, Beta = 1))
 
 
 mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=sdProps),
-                        plotter = plotterTS, randInit = T, niter = 100, nburn = 0, verbose=0, plotNM=NULL) {
+                        plotter = plotterTS, randInit = T, niter = 100, nburn = 0, verbose=0, plotNM=NULL, tell = 100) {
     if(verbose>2) browser()
     if(randInit) current.params <- initRand(current.params)
     vv <- 2 ## mcmc iteration
@@ -134,9 +134,10 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     last.it <- 0
     while(vv <= max_index) {
         if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
-        proposal <- proposer$fxn(logParms(current.params))
-        onpar <- proposal$onpar
-        proposal <- unlogParms(proposal$proposal)
+        proposal0 <- proposer$fxn(logParms(current.params))
+        onpar <- proposal0$onpar
+        propt <- proposal0$type
+        proposal <- unlogParms(proposal0$proposal)
         propVal <- llikePrior(proposal, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
         lmh <- propVal - curVal ## likelihood ratio = log likelihood difference
         if (is.na(lmh)) { ## if NA, print informative info but don't accept it
@@ -158,7 +159,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
         ## browser()
         if(!is.null(plotter)) {
             par(opar)
-            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer, proposal = proposal, onpar=onpar)
+            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer, proposal = proposal, onpar=onpar,proptype=propt)
         }
         ##          do.call(plotter, args=within(plotArgs, {curState <- out[vv,]}))
         ##          if(!is.null(plotNM)) dev.off()
@@ -170,9 +171,10 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
-plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL, onpar = onpar,
-                            proposal = NA, propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue',
-                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.01,1.5), log = 'xy', bump = 5, nlevs = 15,
+plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL, onpar = onpar, 
+                            proptype=proptype,
+                            proposal = NA, propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', every = 200, burn = 100,
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.01,1.5), log = 'xy', bump = 5, nlevs = 50,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     out <- out[!is.na(out[,1]), colnames(out) !='nll', drop=F]
     newParms <- out[nrow(out) , colnames(out) !='nll']
@@ -192,25 +194,37 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
         cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
     par(mar=c(8,lmar,1,1))
-    ## Bivariate density
-
-    nlevs <- 40
+    ## Posterior bivariate density
     cols <- apply(colorRamp(c('black','red','orange','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
+    ## Proposal bivariate density
+    colsProp <- apply(colorRamp(c('white','yellow'),
+                                bias = 1)(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
+    colsProp <- diag(makeTransparent(colsProp, c(0, seq(50,200, l = nlevs-1))))
+    ## rescale axes every so many iterations
+    if(vv + 1 > every) {
+        axisNum <- floor(vv/every)
+        ##if(vv+1==every) browser()
+        tout <- out[burn:min(nrow(out), axisNum*every),]
+        xlim <- quantile(tout[,1], c(.02,.98)) * c(.9, 1.1)
+        ylim <- quantile(tout[,2], c(.02,.98)) * c(.9, 1.1)
+    }
     plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
     if(grepl('x',log)) {
         xticks <- axTicks(1, axp = c(xlim, 2), log = T)
+        if(length(xticks)<3) xticks <- axTicks(1, log = T)
     }else{
         xticks <- pretty(xlim, 5)
     }
     if(grepl('y',log)) {
-        yticks <- axTicks(2, axp = c(ylim, 2), log = T)
+        ##        yticks <- axTicks(2, axp = c(ylim, 2), log = T)
+        yticks <- axTicks(2, log = T)
+        ##        if(length(yticks)<3) yticks <- axTicks(1)
     }else{
         yticks <- pretty(ylim, 5)
     }
-    axis(1, at = xticks, mgp=c(4,2,0))
     axis(2, at = yticks, mgp=c(4,2,0))
+    axis(1, at = xticks, mgp=c(4,2,0))
     outOriginal <- out
-
     Lout <- out
     Lxlim <- xlim
     Lxticks <- xticks
@@ -218,7 +232,6 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     Lyticks <- yticks
     Lxr <- xr <- range(c(out[,1], xlim))
     Lyr <- yr <- range(c(out[,2], ylim))
-
     if(grepl('x',log)) {
         Lout[,1] <- log(out[,1])
         Lxlim <- log(xlim)
@@ -240,6 +253,15 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
     mtext(xparnm, 1, marLine-3, cex = 1.5)
     mtext(yparnm, 2, marLine+3, cex = 1.5)
+    if(proptype=='block') { ## Bivariate proposer
+        bivPDF <- function(x,y) dmnorm(cbind(x,y), mean = log(lastParms), varcov = proposer$covar)
+        xsAt <- seq(Lxlim[1], Lxlim[2], l=30)
+        ysAt <- seq(Lylim[1], Lylim[2], l=30)
+        bivDens <- outer(xsAt, ysAt , bivPDF)
+        if(grepl('x',log)) xsAt <- exp(xsAt)
+        if(grepl('y',log)) ysAt <- exp(ysAt)
+        .filled.contour(xsAt,ysAt, bivDens, levels = pretty(range(bivDens), nlevs, xlim = Lxlim, ylim = Lylim), col = colsProp)
+    }
 
     ## Marginal Histograms
     xbreaks <- seq(Lxr[1], Lxr[2], l=25)
@@ -256,18 +278,20 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     par(new=T)
     plot(0,0, type='n',ylim = Lylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
     axis(2, at = Lyticks, labels = F)
-    valSeq <- seq(Lylim[1],Lylim[2], l = 1000)
-    densSeq <- dnorm(valSeq, log(lastParms[2]), sd = proposer$sdProps[2])
-    propDens <- dnorm(log(proposal[2]), log(lastParms[2]), proposer$sdProps[2])
-    valSeqP <- c(valSeq, rev(valSeq))
-    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
-    par(xpd=NA)
-    polygon(densSeqP, valSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
-    accepted <- newParms[2]==proposal[2]
-    if(accepted) ltyProp <- 1 else ltyProp <- 3
-    segments(max(densSeqP), log(lastParms[2]), min(densSeqP), log(lastParms[2]), col = curCol, lwd = 3)
-    if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]), col = propCol, lty = ltyProp, lwd = 3)
-    par(xpd=T)
+    if(proptype=='sequential') {
+        valSeq <- seq(Lylim[1],Lylim[2], l = 1000)
+        densSeq <- dnorm(valSeq, log(lastParms[2]), sd = proposer$sdProps[2])
+        propDens <- dnorm(log(proposal[2]), log(lastParms[2]), proposer$sdProps[2])
+        valSeqP <- c(valSeq, rev(valSeq))
+        densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
+        par(xpd=NA)
+        polygon(densSeqP, valSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
+        accepted <- newParms[2]==proposal[2]
+        if(accepted) ltyProp <- 1 else ltyProp <- 3
+        segments(max(densSeqP), log(lastParms[2]), min(densSeqP), log(lastParms[2]), col = curCol, lwd = 3)
+        if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]), col = propCol, lty = ltyProp, lwd = 3)
+        par(xpd=T)
+    }
 
     ## X
     par(mar=c(bump,lmar,1,1))
@@ -275,18 +299,20 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     par(new=T)
     plot(0,0, type='n',xlim = Lxlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
     axis(1, at = Lxticks, labels = F)
-    valSeq <- seq(Lxlim[1],Lxlim[2], l = 1000)
-    densSeq <- dnorm(valSeq, log(lastParms[1]), sd = proposer$sdProps[1])
-    propDens <- dnorm(log(proposal[1]), log(lastParms[1]), proposer$sdProps[1])
-    valSeqP <- c(valSeq, rev(valSeq))
-    densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
-    par(xpd=NA)
-    polygon(valSeqP, densSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
-    accepted <- newParms[2]==proposal[2]
-    if(accepted) ltyProp <- 1 else ltyProp <- 3
-    segments(log(lastParms[1]), max(densSeqP), log(lastParms[1]), min(densSeqP), col = curCol, lwd = 3)
-    if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
-    par(xpd=T)
+    if(proptype=='sequential') {
+        valSeq <- seq(Lxlim[1],Lxlim[2], l = 1000)
+        densSeq <- dnorm(valSeq, log(lastParms[1]), sd = proposer$sdProps[1])
+        propDens <- dnorm(log(proposal[1]), log(lastParms[1]), proposer$sdProps[1])
+        valSeqP <- c(valSeq, rev(valSeq))
+        densSeqP <- c(-densSeq * scl, rep(0, length(densSeq)))-dep
+        par(xpd=NA)
+        polygon(valSeqP, densSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
+        accepted <- newParms[2]==proposal[2]
+        if(accepted) ltyProp <- 1 else ltyProp <- 3
+        segments(log(lastParms[1]), max(densSeqP), log(lastParms[1]), min(densSeqP), col = curCol, lwd = 3)
+        if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
+        par(xpd=T)
+    }
     
     ## Time Series
     par(mar=c(6,lmar,1,1))
@@ -314,33 +340,33 @@ plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL,
 sequential.proposer <- function(sdProps) {
     nfitted <- length(sdProps)
     on <- 0
-    return(list(sdProps = sdProps, 
+    return(list(sdProps = sdProps, type = 'sequential',
                 fxn = function(current) {
-  	proposal <- current
-  	proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
-  	on <<- (on+1) %% nfitted
-  	list(proposal=proposal, onpar=on+1)
-    }))
+                    proposal <- current
+                    proposal[on + 1] <- proposal[on + 1] + rnorm(1, mean = 0, sd = sdProps[on + 1])
+                    on <<- (on+1) %% nfitted
+                    list(proposal=proposal, onpar=on+1, type = 'sequential')
+                }))
 }
+
+block.proposer <- function(sdProps) return(sdProps=sdProps,
+                                           fxn = function(current) {
+                                               nfitted <- length(sdProps)
+                                               proposal <- current + rnorm(nfitted, mean = 0, sd = sdProps)
+                                               list(proposal=proposal,  type = 'block')
+                                           })
 
 multiv.proposer <- function(covar, blockLS = list(rownames(covar))) {
     nblocks <- length(blockLS)
     on <- 0
-    return(function(current) {
-        proposal <- current
-        onBlock <- blockLS[[on + 1]]
-        proposal[onBlock] <- current[onBlock] + rmnorm(1, mean = 0, varcov = covar[onBlock,onBlock])
-        proposal <- as.vector(proposal) #otherwise is a matrix
-        names(proposal) <- names(current)
-        on <<- (on+1) %% nblocks
-        proposal
-    })
-}
-
-block.proposer <- function(sdProps) return(function(current) {
-    nfitted <- length(sdProps)
-    current + rnorm(nfitted, mean = 0, sd = sdProps)
-})
+    return(list(covar = covar, type = 'block',
+                fxn = function(current) {
+                    proposal <- current + rmnorm(1, mean = 0, varcov = covar)
+                    propsosal <- as.vector(proposal)
+                    names(proposal) <- names(current)
+                    list(proposal=proposal,  type = 'block', sdProps=covar, onpar = NA)
+                }))
+       }
 
 
 
