@@ -169,7 +169,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
 }
 
 plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL,
-                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.005,3), log = 'xy', bump = 5, nlevs = 15,
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.01,3), log = 'xy', bump = 5, nlevs = 15,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     out <- out[1:(vv-1), colnames(out) !='nll']
     fit.params <- out[nrow(out),]
@@ -184,11 +184,14 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     simDat$I <- rowSums(simDat[, Is])
 
     layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
-    par(opar, 'ps'=ps) 
+    par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
+        cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
     par(mar=c(8,lmar,1,1))
     ## Bivariate density
+
+nlevs <- 40
     cols <- apply(colorRamp(c('black','red','orange','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-    plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
+     plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
     if(grepl('x',log)) {
         xticks <- axTicks(1, axp = c(xlim, 3), log = T)
     }else{
@@ -201,14 +204,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     }
     axis(1, at = xticks, mgp=c(4,2,0))
     axis(2, at = yticks, mgp=c(4,2,0))
-    if(nrow(out)>40) {
-        z <- kde2d(out[,1], out[,2], lims = c(xlim, ylim))
-        .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = xlim, ylim = ylim), col = cols)
-    }
-    points(out, col = gray(.6), cex = .5, pch = 16)
-    mtext(xparnm, 1, marLine-3, cex = 1.5)
-    mtext(yparnm, 2, marLine+3, cex = 1.5)
-    ## Marginal Histograms
+    outOriginal <- out
 
     if(grepl('x',log)) {
         out[,1] <- log(out[,1])
@@ -220,6 +216,17 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         ylim <- log(ylim)
         yticks <- log(yticks)        
     }
+    if(nrow(out)>20) {
+        z <- kde2d(out[,1], out[,2], lims = c(xlim, ylim), h = .2)
+        if(grepl('x',log)) z$x <- exp(z$x)
+        if(grepl('y',log)) z$y <- exp(z$y)
+        .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = xlim, ylim = ylim), col = cols)
+    }
+    if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
+    mtext(xparnm, 1, marLine-3, cex = 1.5)
+    mtext(yparnm, 2, marLine+3, cex = 1.5)
+
+    ## Marginal Histograms
     xr <- range(c(out[,1], xlim))
     yr <- range(c(out[,2], ylim))
         xbreaks <- seq(xr[1], xr[2], l=25)

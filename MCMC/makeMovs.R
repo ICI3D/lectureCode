@@ -87,7 +87,6 @@ saveVideo({
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
 
 
-
 ## Movie
 nm <- paste0('movies/','HIV-', '.mov')
 if(file.exists(nm)) file.remove(nm)
@@ -95,7 +94,7 @@ set.seed(4)
 saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=c(.15,.15)),
-                plotter = plotterParmDens, randInit = T, niter = 50, nburn = 0, verbose=0, plotNM=NULL)
+                plotter = plotterParmDens, randInit = T, niter = 40, nburn = 0, verbose=0, plotNM=NULL)
 },
           video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
