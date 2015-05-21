@@ -1,4 +1,4 @@
-library(deSolve); library(ggplot2); library(MASS); library(sfsmisc); library(mnormt)
+library(deSolve); library(ggplot2); library(MASS); library(sfsmisc); library(mnormt); library(ellipse)
 setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('utilityFxns.R')
 
@@ -56,8 +56,8 @@ sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep
                       lci = lci, uci = uci))
 }
 
-
-simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=disease_params(Beta = .9, alpha = 8, progRt = 1/2.5)))
+trueParms <- disease_params(Beta = .9, alpha = 8, progRt = 1/2.5)
+simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
 simDat$I <- rowSums(simDat[, Is])
 plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
 
@@ -184,15 +184,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     lastParms <- fit.params <- out[nrow(out)-1,]
     out <- out[1:(nrow(out)-1),,drop=F]
     parnms <- colnames(out)
-    parms <- within(ref.params, { ## subs fitting parameters into reference parameter vector
-        for(nm in parnms) assign(nm, as.numeric(fit.params[nm]))
-        rm(nm)
-    })
     if(verbose > 7) browser()
-    ## simulate model
-    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
-    simDat$I <- rowSums(simDat[, Is])
     for(bb in 1:2) {
+
+        ## if(vv==3) save(list = ls(all.names = TRUE), file='dbg.Rdata')
+        ## load(file='dbg.Rdata')
+        ## ls()
         layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
         par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
@@ -202,8 +199,8 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             axisNum <- floor(vv/every)
             ##if(vv+1==every) browser()
             tout <- out[burn:min(nrow(out), axisNum*every),]
-            xlim <- quantile(tout[,1], c(.02,.98)) * c(.7, 1.3)
-            ylim <- quantile(tout[,2], c(.02,.98)) * c(.7, 1.3)
+            xlim <- quantile(tout[,1], c(.02,.98)) * c(.5, 2)
+            ylim <- quantile(tout[,2], c(.02,.98)) * c(.5, 2)
             nlevs <- nlevs*4
         }
         plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
@@ -250,28 +247,32 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(grepl('y',log)) z$y <- exp(z$y)
             ## Posterior bivariate density
             cols <- apply(colorRamp(c('black','light green','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-            .filled.contour(z$x, z$y, z$z, levels = pretty(range(z$z), nlevs, xlim = Lxlim, ylim = Lylim), col = cols)
+            .filled.contour(z$x, z$y, z$z, levels = seq(0, max(z$z), nlevs), col = cols)
         }
         if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
         mtext(xparnm, 1, marLine-3, cex = 1.5)
         mtext(yparnm, 2, marLine+3, cex = 1.5)
+
         if(proptype=='block') { ## Bivariate proposer
             bivPDF <- function(x,y) dmnorm(cbind(x,y), mean = log(lastParms), varcov = proposer$covar)
-            xsAt <- seq(Lxlim[1], Lxlim[2], l=30)
-            ysAt <- seq(Lylim[1], Lylim[2], l=30)
+            xsAt <- seq(Lxlim[1], Lxlim[2], l=70)
+            ysAt <- seq(Lylim[1], Lylim[2], l=70)
             bivDens <- outer(xsAt, ysAt , bivPDF)
             if(grepl('x',log)) xsAt <- exp(xsAt)
             if(grepl('y',log)) ysAt <- exp(ysAt)
             ## Proposal bivariate density
+            nlevs <- 40
             colsProp <- apply(colorRamp(c('white','yellow'),
-                                        bias = 1)(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-            colsProp <- diag(makeTransparent(colsProp, c(0, seq(50,200, l = nlevs-1))))
-            if(bb>1) .filled.contour(xsAt,ysAt, bivDens, levels = pretty(range(bivDens), nlevs, xlim = Lxlim, ylim = Lylim), col = colsProp)
+                                        bias = 1)(seq(0,1, l = nlevs+1)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
+            colsProp <- diag(makeTransparent(colsProp, c(0,0, seq(50,200, l = nlevs-2))))
+            ##if(bb>1) 
+            .filled.contour(xsAt,ysAt, bivDens, levels = seq(0, max(bivDens), l=nlevs), col = colsProp) #
+            ## polygon(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), 
+            ## col = makeTransparent(propDistCol,50), border = NA)
             accepted <- sum(newParms!=proposal)==0
             pchProp <- ifelse(accepted,19,21)
             points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 2.5)
             if(bb>1) points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 2.5)
-
         }
 
         ## Marginal Histograms
@@ -280,7 +281,6 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         xhist  <-  hist(Lout[,1], plot=FALSE, breaks = xbreaks)
         yhist  <-  hist(Lout[,2], plot=FALSE, breaks = ybreaks)
         top  <-  max(c(xhist$counts, yhist$counts))
-
         ## Y
         scl <- .1
         dep <- .1
@@ -303,7 +303,6 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]), col = propCol, lty = ltyProp, lwd = 3)
             par(xpd=T)
         }
-
         ## X
         par(mar=c(bump,lmar,1,1))
         barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA)
@@ -324,13 +323,33 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
             par(xpd=T)
         }
-        
         ## Time Series
+        ## True parameters
+        trueDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
+        trueDat$I <- rowSums(trueDat[, Is])
+        ## lastParms
+        lastParmsAll <- within(ref.params, { ## subs fitting parameters into reference parameter vector
+            for(nm in parnms) assign(nm, as.numeric(lastParms[nm]))
+            rm(nm)
+        })
+        lastParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=lastParmsAll))
+        lastParmsDat$I <- rowSums(lastParmsDat[, Is])
+        ## lastParms
+        propParmsAll <- within(ref.params, { ## subs fitting parameters into reference parameter vector
+            for(nm in parnms) assign(nm, as.numeric(proposal[nm]))
+            rm(nm)
+        })
+        propParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=propParmsAll))
+        propParmsDat$I <- rowSums(propParmsDat[, Is])
         par(mar=c(6,lmar,1,1))
-        plot(simDat$time, simDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='red', lwd = par()$lwd, mgp = c(4,3,0))
+        plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='white', lwd = par()$lwd+2, mgp = c(4,3,0))
+        lines(lastParmsDat$time, lastParmsDat$I, col = curCol, lwd = par()$lwd+2)
+        accepted <- sum(newParms!=proposal)==0
+        ltyProp <- ifelse(accepted,1,3)
+        lines(propParmsDat$time, propParmsDat$I, col = propCol, lwd = par()$lwd+2, lty = ltyProp)
         ## add data
-        points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 4)
-        arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3, lwd = 3)
+        points(obsDat$time, obsDat$sampPrev, col = 'white', pch = 16, cex = 4)
+        arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('white'), len = .025, angle = 90, code = 3, lwd = 3)
         mtext('HIV\nprevalence', 2, marLine+ 7, adj = .5)
     }
 }

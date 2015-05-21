@@ -109,8 +109,8 @@ if(file.exists(nm)) file.remove(nm)
 saveVideo({
     ani.options(interval = 0.05, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=4, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
-                proposer = multiv.proposer(covar = matrix(c(.1,.02,.02,.1),2,2)),
-                plotter = plotterParmDens, randInit = T, niter = 300, nburn = 0, verbose=0, plotNM=NULL)
+                proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)),
+                plotter = plotterParmDens, randInit = T, niter = 100, nburn = 0, verbose=0, plotNM=NULL)
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
 mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
