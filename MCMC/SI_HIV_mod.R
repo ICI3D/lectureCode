@@ -45,7 +45,7 @@ SImod <- function(tt, yy, parms) with(parms, {
     return(list(deriv))
 })
 
-sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(150, length(tseq)), verbose=0) {
+sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(100, length(tseq)), verbose=0) {
     if(verbose>0) browser()
     simDat$I <- rowSums(simDat[, Is])
     prev_at_sample_times <- simDat[simDat$time %in% tseq, 'I']
@@ -187,9 +187,14 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
     if(verbose > 7) browser()
     for(bb in 1:2) {
 
-        ## if(vv==3) save(list = ls(all.names = TRUE), file='dbg.Rdata')
+        if(vv==90) save(list = ls(all.names = TRUE), file='dbg.Rdata')
+        if(vv==210) save(list = ls(all.names = TRUE), file='dbgE210.Rdata')
+        if(vv==211) save(list = ls(all.names = TRUE), file='dbgE211.Rdata')
         ## load(file='dbg.Rdata')
-        ## ls()
+
+        load(file='dbgE210.Rdata')
+        png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl)
+
         layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
         par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
@@ -199,9 +204,9 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             axisNum <- floor(vv/every)
             ##if(vv+1==every) browser()
             tout <- out[burn:min(nrow(out), axisNum*every),]
-            xlim <- quantile(tout[,1], c(.02,.98)) * c(.5, 2)
-            ylim <- quantile(tout[,2], c(.02,.98)) * c(.5, 2)
-            nlevs <- nlevs*4
+            xlim <- quantile(tout[,1], c(.02,.98)) * c(.7, 1/.7)
+            ylim <- quantile(tout[,2], c(.02,.98)) * c(.9, 1/.9)
+            nlevs <- nlevs*3
         }
         plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
         if(grepl('x',log)) {
@@ -242,12 +247,13 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             Lyr <- log(yr)
         }
         if(nrow(out)>20) {
-            z <- kde2d(Lout[,1], Lout[,2], lims = c(Lxlim, Lylim), h = .2)
+            z <- kde2d(Lout[,1], Lout[,2], lims = c(Lxlim, Lylim), h = c(.5,.2))
             if(grepl('x',log)) z$x <- exp(z$x)
             if(grepl('y',log)) z$y <- exp(z$y)
             ## Posterior bivariate density
-            cols <- apply(colorRamp(c('black','light green','white'))(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-            .filled.contour(z$x, z$y, z$z, levels = seq(0, max(z$z), nlevs), col = cols)
+            cols2Ramp <- c('black','dark green', lgreen,'white')
+            cols <- apply(colorRamp(cols2Ramp)(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
+            .filled.contour(z$x, z$y, z$z, levels = seq(0, max(z$z), l=nlevs), col = cols)
         }
         if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
         mtext(xparnm, 1, marLine-3, cex = 1.5)
@@ -264,28 +270,36 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             nlevs <- 40
             colsProp <- apply(colorRamp(c('white','yellow'),
                                         bias = 1)(seq(0,1, l = nlevs+1)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-            colsProp <- diag(makeTransparent(colsProp, c(0,0, seq(50,200, l = nlevs-2))))
+            colsProp <- diag(makeTransparent(colsProp, c(0,0, seq(50,120, l = nlevs-2))))
             ##if(bb>1) 
-            .filled.contour(xsAt,ysAt, bivDens, levels = seq(0, max(bivDens), l=nlevs), col = colsProp) #
+            if(vv < 40 | vv > every)
+                .filled.contour(xsAt,ysAt, bivDens, levels = seq(0, max(bivDens), l=nlevs), col = colsProp) #
+            if(vv>40 & vv< every) 
+                lines(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), col = makeTransparent(propDistCol,150), lwd = 4)
             ## polygon(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), 
             ## col = makeTransparent(propDistCol,50), border = NA)
-            accepted <- sum(newParms!=proposal)==0
-            pchProp <- ifelse(accepted,19,21)
-            points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 2.5)
-            if(bb>1) points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 2.5)
         }
+        accepted <- sum(newParms!=proposal)==0
+        pchProp <- ifelse(accepted,19,21)
+        points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 3)
+        if(bb>1) points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 3, lwd = 4)
 
         ## Marginal Histograms
-        xbreaks <- seq(Lxr[1], Lxr[2], l=25)
-        ybreaks <- seq(Lyr[1], Lyr[2], l=25)
+        xbreaks <- seq(Lxr[1], Lxr[2], l=nlevs)
+        ybreaks <- seq(Lyr[1], Lyr[2], l=nlevs)
         xhist  <-  hist(Lout[,1], plot=FALSE, breaks = xbreaks)
         yhist  <-  hist(Lout[,2], plot=FALSE, breaks = ybreaks)
+        XinRange <- xhist$breaks >= Lxlim[1] & xhist$breaks <= Lxlim[2]
+        YinRange <- yhist$breaks >= Lylim[1] & yhist$breaks <= Lylim[2]
         top  <-  max(c(xhist$counts, yhist$counts))
         ## Y
         scl <- .1
         dep <- .1
         par(mar=c(8,bump+2,1,1)) 
-        barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA)
+       bb <- barplot(yhist$counts[YinRange], names.arg = signif(exp(yhist$mids[YinRange]),2), cex.names = .5,
+                axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA, col = lgreen)
+bb
+
         par(new=T)
         plot(0,0, type='n',ylim = Lylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
         axis(2, at = Lyticks, labels = F)
@@ -305,7 +319,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         }
         ## X
         par(mar=c(bump,lmar,1,1))
-        barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA)
+        barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA, col = lgreen)
         par(new=T)
         plot(0,0, type='n',xlim = Lxlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
         axis(1, at = Lxticks, labels = F)
@@ -323,6 +337,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
             par(xpd=T)
         }
+
         ## Time Series
         ## True parameters
         trueDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
@@ -351,6 +366,10 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         points(obsDat$time, obsDat$sampPrev, col = 'white', pch = 16, cex = 4)
         arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('white'), len = .025, angle = 90, code = 3, lwd = 3)
         mtext('HIV\nprevalence', 2, marLine+ 7, adj = .5)
+        legend(1970,.4, leg = c('truth', 'observed   ', 'current', 'proposal'), lwd = c(4,0,4,4), pch = c(NA, 16, NA, NA), 
+               col = c('white', 'white', curCol, propCol), cex = 1.3, ncol = 2, bty = 'n', y.intersp = 1.5)
+        dev.off()
+
     }
 }
 
