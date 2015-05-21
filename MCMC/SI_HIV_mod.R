@@ -102,7 +102,7 @@ unlogParms <- function(fit.params) {
 unlogParms(logParms(c(alpha = 3, Beta=.3)))
 
 initBounds <- data.frame(rbind( ## for initial conditions
-    c(log(.06),log(2)) ## beta
+    c(log(.2),log(2)) ## beta
    ,c(log(1), log(30)) ## alpha
    ,c(log(1),log(1/10)))) ## progRt
 colnames(initBounds) <- c('lower','upper')
@@ -174,7 +174,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
 plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL, onpar = onpar, 
                             proptype=proptype,
                             proposal = NA, propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', every = 200, burn = 100,
-                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.05,2), log = 'xy', bump = 5, nlevs = 50,
+                            marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.2,2), log = 'xy', bump = 5, nlevs = 50,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     out <- out[!is.na(out[,1]), colnames(out) !='nll', drop=F]
     newParms <- out[nrow(out) , colnames(out) !='nll']
@@ -265,9 +265,8 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         .filled.contour(xsAt,ysAt, bivDens, levels = pretty(range(bivDens), nlevs, xlim = Lxlim, ylim = Lylim), col = colsProp)
         accepted <- sum(newParms!=proposal)==0
         pchProp <- ifelse(accepted,19,21)
-## browser()
-##         points(lastParms, pch = 19, col = curCol, cex = 2.5)
-##         points(proposal, pch = pchProp, col = propCol, cex = 2.5)
+        points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 2.5)
+        points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 2.5)
 
     }
 
