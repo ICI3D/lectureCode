@@ -265,8 +265,10 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         .filled.contour(xsAt,ysAt, bivDens, levels = pretty(range(bivDens), nlevs, xlim = Lxlim, ylim = Lylim), col = colsProp)
         accepted <- sum(newParms!=proposal)==0
         pchProp <- ifelse(accepted,19,21)
-        points(proposal, pch = pchProp, col = propCol, cex = 2.5)
-        points(lastParms, pch = 19, col = curCol, cex = 2.5)
+## browser()
+##         points(lastParms, pch = 19, col = curCol, cex = 2.5)
+##         points(proposal, pch = pchProp, col = propCol, cex = 2.5)
+
     }
 
     ## Marginal Histograms
