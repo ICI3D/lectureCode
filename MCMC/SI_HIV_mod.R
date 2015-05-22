@@ -258,7 +258,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
         mtext(xparnm, 1, marLine-3, cex = 1.5)
         mtext(yparnm, 2, marLine+3, cex = 1.5)
-
+        
         if(proptype=='block') { ## Bivariate proposer
             bivPDF <- function(x,y) dmnorm(cbind(x,y), mean = log(lastParms), varcov = proposer$covar)
             xsAt <- seq(Lxlim[1], Lxlim[2], l=70)
@@ -270,12 +270,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             nlevs <- 40
             colsProp <- apply(colorRamp(c('white','yellow'),
                                         bias = 1)(seq(0,1, l = nlevs+1)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
-            colsProp <- diag(makeTransparent(colsProp, c(0,0, seq(50,120, l = nlevs-2))))
+            colsProp <- diag(makeTransparent(colsProp, c(0,0, seq(50,90, l = nlevs-2))))
             ##if(bb>1) 
-            if(vv < 40 | vv > every)
+            ##if(vv < 40 | vv > every)
                 .filled.contour(xsAt,ysAt, bivDens, levels = seq(0, max(bivDens), l=nlevs), col = colsProp) #
-            if(vv>40 & vv< every) 
-                lines(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), col = makeTransparent(propDistCol,150), lwd = 4)
+            ## if(vv>40 & vv< every) 
+            ##     lines(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), col = makeTransparent(propDistCol,150), lwd = 4)
             ## polygon(exp(ellipse(proposer$covar, centre = log(lastParms), level = .95)), 
             ## col = makeTransparent(propDistCol,50), border = NA)
         }
@@ -292,17 +292,21 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         XinRange <- xhist$breaks >= Lxlim[1] & xhist$breaks <= Lxlim[2]
         YinRange <- yhist$breaks >= Lylim[1] & yhist$breaks <= Lylim[2]
         top  <-  max(c(xhist$counts, yhist$counts))
-        ## Y
         scl <- .1
         dep <- .1
-        par(mar=c(8,bump+2,1,1)) 
-       bb <- barplot(yhist$counts[YinRange], names.arg = signif(exp(yhist$mids[YinRange]),2), cex.names = .5,
-                axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE, border = NA, col = lgreen)
-bb
 
-        par(new=T)
-        plot(0,0, type='n',ylim = Lylim, xlim = c(0,1), axes=F, xlab='',ylab='',main='')
+        ## Y histogram
+        par(mar=c(8,bump+2,1,1))
+        plot(0,0, type='n',ylim = Lylim, xlim = c(0,top), axes=F, xlab='',ylab='',main='')
+        attr(yhist,'class') <- 'list'
+        yhist <- within(yhist, {
+            show <- breaks <= max(Lylim) & breaks  >= min(Lylim)
+            breaks <- breaks[show]
+            counts <- counts[show]
+        })
+        with(yhist, rect(0, breaks[1:(length(breaks) - 1)], counts, breaks[2:length(breaks)], col = lgreen, border=NA))
         axis(2, at = Lyticks, labels = F)
+        ## Y proposal
         if(proptype=='sequential') {
             valSeq <- seq(Lylim[1],Lylim[2], l = 1000)
             densSeq <- dnorm(valSeq, log(lastParms[2]), sd = proposer$sdProps[2])
@@ -317,12 +321,19 @@ bb
             if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]), col = propCol, lty = ltyProp, lwd = 3)
             par(xpd=T)
         }
-        ## X
+        ## X histogram
         par(mar=c(bump,lmar,1,1))
-        barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0, border = NA, col = lgreen)
-        par(new=T)
-        plot(0,0, type='n',xlim = Lxlim, ylim = c(0,1), axes=F, xlab='',ylab='',main='')
+
+        plot(0,0, type='n',xlim = Lxlim, ylim = c(0,top), axes=F, xlab='',ylab='',main='')
+        attr(xhist,'class') <- 'list'
+        xhist <- within(xhist, {
+            show <- breaks <= max(Lxlim) & breaks  >= min(Lxlim)
+            breaks <- breaks[show]
+            counts <- counts[show]
+        })
+        with(xhist, rect(breaks[1:(length(breaks) - 1)], 0, breaks[2:length(breaks)], counts, col = lgreen, border=NA))
         axis(1, at = Lxticks, labels = F)
+        ## X proposer
         if(proptype=='sequential') {
             valSeq <- seq(Lxlim[1],Lxlim[2], l = 1000)
             densSeq <- dnorm(valSeq, log(lastParms[1]), sd = proposer$sdProps[1])
