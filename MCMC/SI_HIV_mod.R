@@ -124,9 +124,11 @@ initRand(c(alpha = 3, Beta = 1))
 
 
 mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=sdProps),
+                        adaptiveMCMC = F, startAdapt = 150, 
                         plotter = plotterTS, randInit = T, niter = 100, nburn = 0, verbose=0, plotNM=NULL, tell = 100) {
     if(verbose>2) browser()
     if(randInit) current.params <- initRand(current.params)
+    nfitted <- length(current.params)
     vv <- 2 ## mcmc iteration
     accept <- 0
     curVal <- llikePrior(current.params, ref.params = ref.params, obsDat=obsDat, verbose = verbose)
@@ -135,8 +137,18 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
     colnames(out) <- c(names(current.params), 'nll')
     max_index <- dim(out)[1]
     last.it <- 0
+    ## Store original covariance matrix
+    if(proposer$type=='block') originalCovar <- get('covar', envir = environment(proposer$fxn)) 
     while(vv <= max_index) {
         if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
+        ## Adaptive MCMC
+        if(adaptiveMCMC & proposer$type=='block' & vv > startAdapt & vv %% 50 == 0) { ## adapt covariance every 50 iterations
+            adaptedCovar <- 2.38^2 / nfitted * cov.wt(out[1:(vv-1),1:nfitted])$cov ## will converge for vv large
+            adaptedCovar <- adaptedCovar*.95 + originalCovar*.05 ## 95% adapted & 5% original
+            rownames(adaptedCovar) <- colnames(adaptedCovar) <- names(current.params)
+            assign('covar', adaptedCovar, envir = environment(proposer$fxn))
+        }
+
         proposal0 <- proposer$fxn(logParms(current.params))
         onpar <- proposal0$onpar
         propt <- proposal0$type
@@ -192,8 +204,8 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         if(vv==211) save(list = ls(all.names = TRUE), file='dbgE211.Rdata')
         ## load(file='dbg.Rdata')
 
-        load(file='dbgE210.Rdata')
-        png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl)
+        ## load(file='dbgE210.Rdata')
+        ##  png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl)
 
         layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
         par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
@@ -282,6 +294,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         accepted <- sum(newParms!=proposal)==0
         pchProp <- ifelse(accepted,19,21)
         points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 3)
+        points( trueParms[names(lastParms[1])], trueParms[names(lastParms[2])], pch = 19, col = 'white', cex = 3)
         if(bb>1) points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 3, lwd = 4)
 
         ## Marginal Histograms
@@ -368,7 +381,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         propParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=propParmsAll))
         propParmsDat$I <- rowSums(propParmsDat[, Is])
         par(mar=c(6,lmar,1,1))
-        plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.4), col='white', lwd = par()$lwd+2, mgp = c(4,3,0))
+        plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.45), col='white', lwd = par()$lwd+2, mgp = c(4,3,0))
         lines(lastParmsDat$time, lastParmsDat$I, col = curCol, lwd = par()$lwd+2)
         accepted <- sum(newParms!=proposal)==0
         ltyProp <- ifelse(accepted,1,3)
@@ -377,9 +390,11 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         points(obsDat$time, obsDat$sampPrev, col = 'white', pch = 16, cex = 4)
         arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('white'), len = .025, angle = 90, code = 3, lwd = 3)
         mtext('HIV\nprevalence', 2, marLine+ 7, adj = .5)
-        legend(1970,.4, leg = c('truth', 'observed   ', 'current', 'proposal'), lwd = c(4,0,4,4), pch = c(NA, 16, NA, NA), 
-               col = c('white', 'white', curCol, propCol), cex = 1.3, ncol = 2, bty = 'n', y.intersp = 1.5)
-        dev.off()
+        par(xpd=NA)
+        legend(1970,.5, leg = c('truth', 'observed   ', 'current', 'proposal (accepted)', 'proposal (rejected)'), lwd = c(4,0,4,4,4), pch = c(NA, 16, 16, 16, 21),
+               lty = c(1,NA,1,1,3), seg.len = 4, pt.cex = 3,
+               col = c('white', 'white', curCol, propCol, propCol), cex = 1.3, ncol = 2, bty = 'n', y.intersp = 1.5)
+##        dev.off()
 
     }
 }
