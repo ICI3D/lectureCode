@@ -113,6 +113,18 @@ saveVideo({
                 plotter = plotterParmDens, randInit = T, niter = 250, nburn = 0, verbose=0, plotNM=NULL)
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
+
+## Adaptive Block sampler
+nm <- paste0('movies/','HIV-blockAdapt', '.mov')
+set.seed(4)
+if(file.exists(nm)) file.remove(nm)
+saveVideo({
+    ani.options(interval = 0.05, nmax = 300, ani.dev='png', ani.type='png')
+    mcmcSampler(c(alpha=4, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
+                proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)), adaptiveMCMC = T, startAdapt = 150,
+                plotter = plotterParmDens, randInit = T, niter = 60, nburn = 0, verbose=0, plotNM=NULL)
+}, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
+
 mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
             proposer = multiv.proposer(covar = matrix(c(.15,.02,.02,.15),2,2)),
             plotter = plotterParmDens, randInit = T, niter = 20, nburn = 0, verbose=.3, plotNM=NULL)

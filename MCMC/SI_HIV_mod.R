@@ -143,7 +143,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
         if ((verbose > 1) || (verbose && (vv%%tell == 0))) print(paste("on iteration",vv,"of",last.it + niter + 1))
         ## Adaptive MCMC
         if(adaptiveMCMC & proposer$type=='block' & vv > startAdapt & vv %% 50 == 0) { ## adapt covariance every 50 iterations
-            adaptedCovar <- 2.38^2 / nfitted * cov.wt(out[1:(vv-1),1:nfitted])$cov ## will converge for vv large
+            adaptedCovar <- 2.38^2 / nfitted * cov.wt(log(out[1:(vv-1),1:nfitted]))$cov ## will converge for vv large
             adaptedCovar <- adaptedCovar*.95 + originalCovar*.05 ## 95% adapted & 5% original
             rownames(adaptedCovar) <- colnames(adaptedCovar) <- names(current.params)
             assign('covar', adaptedCovar, envir = environment(proposer$fxn))
@@ -172,22 +172,23 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
         ##            if(!is.null(plotNM)) 
         ##png(paste0(plotNM,'.png'), width = 800*resScl, height = 600*resScl)
         ## browser()
+        aratio <- accept/((vv-nburn))
         if(!is.null(plotter)) {
             par(opar)
-            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer, proposal = proposal, onpar=onpar,proptype=propt)
+            plotter(out, vv, ref.params=ref.params, obsDat=obsDat, proposer = proposer, proposal = proposal, onpar=onpar,proptype=propt, aratio = aratio)
         }
         ##          do.call(plotter, args=within(plotArgs, {curState <- out[vv,]}))
         ##          if(!is.null(plotNM)) dev.off()
 
     }
     if(!is.null(plotNM)) graphics.off()
-    aratio <- accept/((vv-nburn))
+
     colnames(out) <- c(names(current.params), 'nll')
     return(list(out = out[1:nrow(out)>(nburn+1),], aratio = aratio, current.params = current.params, ref.params=ref.params))
 }
 
 plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, obsDat, verbose=0, proposer = NULL, onpar = onpar, 
-                            proptype=proptype,
+                            proptype=proptype, aratio = NULL,
                             proposal = NA, propDistCol = 'yellow', propCol='brown', curCol = 'dodger blue', every = 200, burn = 100,
                             marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.2,2), log = 'xy', bump = 5, nlevs = 50,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
@@ -202,12 +203,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         if(vv==90) save(list = ls(all.names = TRUE), file='dbg.Rdata')
         if(vv==210) save(list = ls(all.names = TRUE), file='dbgE210.Rdata')
         if(vv==211) save(list = ls(all.names = TRUE), file='dbgE211.Rdata')
-        ## load(file='dbg.Rdata')
+        ##load(file='dbg.Rdata')
 
-        ## load(file='dbgE210.Rdata')
-        ##  png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl)
+##          load(file='dbgE210.Rdata')
+## png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl)
 
-        layout(matrix(c(3,1,4,0,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
+        layout(matrix(c(3,1,4,5,2,4), 3, 2), w = c(1,.5), h = c(.6,1,1))
         par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
             cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
         par(mar=c(8,lmar,1,1))
@@ -267,12 +268,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             cols <- apply(colorRamp(cols2Ramp)(seq(0,1, l = nlevs)), 1, function(x) rgb(x[1],x[2],x[3], max=255))
             .filled.contour(z$x, z$y, z$z, levels = seq(0, max(z$z), l=nlevs), col = cols)
         }
-        if(nrow(out)<60)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
+        if(nrow(out)<30)    points(outOriginal, col = makeTransparent('light green', alpha = 100), cex = 2, pch = 16)
         mtext(xparnm, 1, marLine-3, cex = 1.5)
         mtext(yparnm, 2, marLine+3, cex = 1.5)
         
         if(proptype=='block') { ## Bivariate proposer
-            bivPDF <- function(x,y) dmnorm(cbind(x,y), mean = log(lastParms), varcov = proposer$covar)
+            bivPDF <- function(x,y) dmnorm(cbind(x,y), mean = log(lastParms), varcov = get('covar', envir = environment(proposer$fxn)))
             xsAt <- seq(Lxlim[1], Lxlim[2], l=70)
             ysAt <- seq(Lylim[1], Lylim[2], l=70)
             bivDens <- outer(xsAt, ysAt , bivPDF)
@@ -361,6 +362,8 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep, col = propCol, lty = ltyProp, lwd = 3)
             par(xpd=T)
         }
+        if((vv+1) > (every - 30) & (vv+1) < every) mtext('about to\nzoom in', 2, 3)
+        if((vv+1) >= (every) & (vv+1) < (every+30)) mtext('just \nzoomed in', 2, 3)        
 
         ## Time Series
         ## True parameters
@@ -380,7 +383,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         })
         propParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=propParmsAll))
         propParmsDat$I <- rowSums(propParmsDat[, Is])
-        par(mar=c(6,lmar,1,1))
+        par(mar=c(6,lmar,3,1))
         plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.45), col='white', lwd = par()$lwd+2, mgp = c(4,3,0))
         lines(lastParmsDat$time, lastParmsDat$I, col = curCol, lwd = par()$lwd+2)
         accepted <- sum(newParms!=proposal)==0
@@ -394,7 +397,11 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         legend(1970,.5, leg = c('truth', 'observed   ', 'current', 'proposal (accepted)', 'proposal (rejected)'), lwd = c(4,0,4,4,4), pch = c(NA, 16, 16, 16, 21),
                lty = c(1,NA,1,1,3), seg.len = 4, pt.cex = 3,
                col = c('white', 'white', curCol, propCol, propCol), cex = 1.3, ncol = 2, bty = 'n', y.intersp = 1.5)
-##        dev.off()
+        par(xpd=F)
+        par(mar=rep(0,4))
+        plot(0,0, type = 'n', xlim = c(0,10), ylim = c(0,10), axes = F)
+        text(4.5,5, paste0('acceptance ratio = ', signif(aratio,2)), cex = 1.5)
+        ## dev.off()
 
     }
 }
@@ -435,12 +442,12 @@ block.proposer <- function(sdProps) return(sdProps=sdProps,
 multiv.proposer <- function(covar, blockLS = list(rownames(covar))) {
     nblocks <- length(blockLS)
     on <- 0
-    return(list(covar = covar, type = 'block',
+    return(list(type = 'block',
                 fxn = function(current) {
                     proposal <- current + rmnorm(1, mean = 0, varcov = covar)
                     propsosal <- as.vector(proposal)
                     names(proposal) <- names(current)
-                    list(proposal=proposal,  type = 'block', sdProps=covar, onpar = NA)
+                    list(proposal=proposal,  type = 'block', covar=covar, onpar = NA)
                 }))
        }
 
