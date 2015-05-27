@@ -115,18 +115,30 @@ saveVideo({
 
 
 ## Adaptive Block sampler
-nm <- paste0('movies/','HIV-blockAdapt', '.mov')
+nm <- paste0('movies/','HIV-blockAdapt2', '.mov')
 set.seed(4)
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
     ani.options(interval = 0.05, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=4, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
-                proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)), adaptiveMCMC = T, startAdapt = 150,
-                plotter = plotterParmDens, randInit = T, niter = 60, nburn = 0, verbose=0, plotNM=NULL)
+                proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)), adaptiveMCMC = T,
+                startAdapt = 300, adptBurn = 200,
+                plotter = plotterParmDens, randInit = T, niter = 500, nburn = 0, verbose=0, plotNM=NULL)
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
 mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
             proposer = multiv.proposer(covar = matrix(c(.15,.02,.02,.15),2,2)),
             plotter = plotterParmDens, randInit = T, niter = 20, nburn = 0, verbose=.3, plotNM=NULL)
 
-
+## Stills for adaptive block sampler
+repVec <- c('repDat','repCurr', 'repProp',  'repLast', 'repPropKern', 'repPost', 'repHist', 'repHPD')
+for(rr in 1:5) {
+    png(paste0('movies/adpt-',rr,'.png'), width = 700*resScl, height = 700*resScl) #
+    set.seed(4)
+    mcmcSampler(c(alpha=4, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
+                proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)), adaptiveMCMC = T,
+                startAdapt = 300, adptBurn = 200,
+                repressed = repVec[-c(0:rr)],
+                plotter = plotterParmDens, randInit = T, niter = 2, nburn = 0, verbose=0, plotNM=NULL)
+    dev.off()
+}
