@@ -87,14 +87,14 @@ saveVideo({
 }, video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 800*resScl, ani.height = 600*resScl)
 
 set.seed(4)
-
 ## Bivariate sequential sampler
 nm <- paste0('movies/','HIV-seq', '.mov')
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
-    mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=c(.15,.15)),
-                plotter = plotterParmDens, randInit = T, niter = 300, nburn = 0, verbose=0, plotNM=NULL)
+    mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1
+                , proposer = sequential.proposer(sdProps=c(.15,.15))
+                , plotter = plotterParmDens, randInit = T, niter = 30, nburn = 0, verbose=0, plotNM=NULL)
 },
           video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
@@ -131,14 +131,14 @@ mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1,
             plotter = plotterParmDens, randInit = T, niter = 20, nburn = 0, verbose=.3, plotNM=NULL)
 
 ## Stills for adaptive block sampler
-repVec <- c('repDat','repCurr', 'repProp',  'repLast', 'repPropKern', 'repPost', 'repHist', 'repHPD')
-for(rr in 1:5) {
+for(rr in 1:6) {
     png(paste0('movies/adpt-',rr,'.png'), width = 700*resScl, height = 700*resScl) #
     set.seed(4)
     mcmcSampler(c(alpha=4, Beta=.9), ref.params=disease_params(), obsDat, seed = 1, 
                 proposer = multiv.proposer(covar = matrix(c(.02,.00,.00,.02),2,2)), adaptiveMCMC = T,
                 startAdapt = 300, adptBurn = 200,
-                repressed = repVec[-c(0:rr)],
+                showing = showingFXN(shDat=rr>1, shCurr=rr>2, shLast = rr>2, shPropKern =rr>3, shProp=rr>4,
+                    shHist=rr>5, shPost=F, shAratio = F),
                 plotter = plotterParmDens, randInit = T, niter = 2, nburn = 0, verbose=0, plotNM=NULL)
     dev.off()
 }
