@@ -9,7 +9,7 @@ lpurp <- rgb(178,160,198, maxColorValue = 255)
 lblue <- rgb(185,221,231, maxColorValue = 255)
 
 disease_params <- function(Beta = 0.3, alpha = 1, progRt = 1/2.5,
-                           birthRt = 1/40, deathRt = birthRt, ...)
+                           birthRt = .03, deathRt = 1/60, ...)
     return(as.list(environment()))
 
 disease_params()
@@ -45,7 +45,7 @@ SImod <- function(tt, yy, parms) with(parms, {
     return(list(deriv))
 })
 
-sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(100, length(tseq)), verbose=0) {
+sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(80, length(tseq)), verbose=0) {
     if(verbose>0) browser()
     simDat$I <- rowSums(simDat[, Is])
     prev_at_sample_times <- simDat[simDat$time %in% tseq, 'I']
@@ -56,9 +56,11 @@ sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep
                       lci = lci, uci = uci))
 }
 
+set.seed(4)
 trueParms <- disease_params(Beta = .9, alpha = 8, progRt = 1/2.5)
 simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
 simDat$I <- rowSums(simDat[, Is])
+simDat$N <- rowSums(simDat[, c('S',Is)])
 plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
 
 obsDat <- sampleEpidemic(simDat, verbose = 0)
@@ -200,7 +202,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                             obsCol = gray(.7),
                             every = 200, burn = 100,
                             marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.2,2), log = 'xy',
-                            bump = 5, nlevs = 50, ts.lwd = 7,
+                            bump = 5, nlevs = 40, ts.lwd = 7,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     with(showing, {
         out <- out[!is.na(out[,1]), colnames(out) !='nll', drop=F]
@@ -215,22 +217,26 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(vv==210) save(list = ls(all.names = TRUE), file='dbgE210.Rdata')
             if(vv==211) save(list = ls(all.names = TRUE), file='dbgE211.Rdata')
             ##load(file='dbg.Rdata')
-
+            if(!is.null(plotNM)) {
+                dirnm <- file.path('movies',plotNM)
+                if(!file.exists(dirnm)) dir.create(dirnm)
+                png(file.path('movies',plotNM,paste0('BivariateSeq-',vv,'-',bb,'.png')),
+                    width = 700*resScl, height = 700*resScl)
+            }
             ##          load(file='dbgE210.Rdata')
             ## png(paste0('movies/test.png'), width = 700*resScl, height = 700*resScl) #
-
             layout(matrix(c(3,1,4,5,2,4), 3, 2), w = c(1,.5), h = c(.6,1,.8))
             par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 
                 cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
             par(mar=c(8,lmar,1,1))
             ## rescale axes every so many iterations
-            if(vv + 1 > every) {
+            if(vv + 1 > every & bb==1) {
                 axisNum <- floor(vv/every)
                 ##if(vv+1==every) browser()
                 tout <- out[burn:min(nrow(out), axisNum*every),]
                 xlim <- quantile(tout[,1], c(.02,.98)) * c(.7, 1/.7)
                 ylim <- quantile(tout[,2], c(.02,.98)) * c(.9, 1/.9)
-                nlevs <- nlevs*3
+                nlevs <- round(nlevs*2.5)
             }
             plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
             if(grepl('x',log)) {
@@ -453,10 +459,8 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             if(shHist) 
                 plot(0,0, type = 'n', xlim = c(0,10), ylim = c(0,10), axes = F)
             if(shAratio) 
-                if(!is.null(aratio))    text(4.5,5, paste0('acceptance ratio = ', signif(aratio,2)), cex = 1.5)
-            
-            ## dev.off()
-            
+                if(!is.null(aratio))    text(4.5,5, paste0('acceptance ratio = ', formatC(aratio,2, format='f')), cex = 1.5)
+            if(!is.null(plotNM)) dev.off()
         }
     })
 }
