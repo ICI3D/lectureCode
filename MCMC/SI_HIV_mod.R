@@ -188,7 +188,7 @@ mcmcSampler <- function(current.params, ref.params=disease_params(), obsDat, see
 }
 
 
-showingFXN <- function(shPost = T, shHPD = F, shPropKern=T, shLast=T, shHist = T,
+showingFXN <- function(shPost = T, shHPD = F, shPropKern=T, shHist = T,
                        shProp=T, shDat=T, shCurr=T, shAratio=T)
     return(as.list(environment()))
 
@@ -200,7 +200,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                             obsCol = gray(.7),
                             every = 200, burn = 100,
                             marLine = 8, lmar=23, ps = 25, xlim = c(1,50), ylim = c(.2,2), log = 'xy',
-                            bump = 5, nlevs = 50, ts.lwd = 10,
+                            bump = 5, nlevs = 50, ts.lwd = 7,
                             yparnm = expression(beta), xparnm=expression(alpha)) {
     with(showing, {
         out <- out[!is.na(out[,1]), colnames(out) !='nll', drop=F]
@@ -315,13 +315,14 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
 
             accepted <- sum(newParms!=proposal)==0
             pchProp <- ifelse(accepted,19,21)
-            if(shLast) 
+            if(shCurr) 
                 points(lastParms[1],lastParms[2], pch = 19, col = curCol, cex = 3)
-            points( trueParms[names(lastParms[1])], trueParms[names(lastParms[2])], pch = 19, col = 'white', cex = 3)
+            points( trueParms[names(lastParms[1])], trueParms[names(lastParms[2])], pch = 19,
+                   col = 'white', cex = 3)
             if(shProp) 
                 if(bb>1) points(proposal[1],proposal[2], pch = pchProp, col = propCol, cex = 3, lwd = 4)
 
-            if(shHist) {
+            if(shPropKern | shHist) {
                 ## Marginal Histograms
                 xbreaks <- seq(Lxr[1], Lxr[2], l=nlevs)
                 ybreaks <- seq(Lyr[1], Lyr[2], l=nlevs)
@@ -342,11 +343,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                     breaks <- breaks[show]
                     counts <- counts[show]
                 })
-                with(yhist, rect(0, breaks[1:(length(breaks) - 1)], counts, breaks[2:length(breaks)],
-                                 col = lgreen, border=NA))
+                if(shHist)
+                    with(yhist, rect(0, breaks[1:(length(breaks) - 1)], counts, breaks[2:length(breaks)],
+                                     col = lgreen, border=NA))
                 axis(2, at = Lyticks, labels = F)
                 ## Y proposal
-                if(proptype=='sequential') {
+                if(proptype=='sequential' & shPropKern) {
                     valSeq <- seq(Lylim[1],Lylim[2], l = 1000)
                     densSeq <- dnorm(valSeq, log(lastParms[2]), sd = proposer$sdProps[2])
                     propDens <- dnorm(log(proposal[2]), log(lastParms[2]), proposer$sdProps[2])
@@ -357,9 +359,11 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                     polygon(densSeqP, valSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
                     accepted <- newParms[2]==proposal[2]
                     if(accepted) ltyProp <- 1 else ltyProp <- 3
-                    segments(max(densSeqP), log(lastParms[2]), min(densSeqP), log(lastParms[2]),
-                             col = curCol, lwd = 3)
-                    if(onpar==1) segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]),
+                    if(shCurr)
+                        segments(max(densSeqP), log(lastParms[2]), min(densSeqP), log(lastParms[2]),
+                                 col = curCol, lwd = 3)
+                    if(onpar==1 & shProp & bb==2)
+                        segments(-dep, log(proposal[2]), -propDens*scl-dep, log(proposal[2]),
                            col = propCol, lty = ltyProp, lwd = 3)
                     par(xpd=T)
                 }
@@ -372,11 +376,12 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                     breaks <- breaks[show]
                     counts <- counts[show]
                 })
-                with(xhist, rect(breaks[1:(length(breaks) - 1)], 0, breaks[2:length(breaks)], counts,
-                                 col = lgreen, border=NA))
+                if(shHist)
+                    with(xhist, rect(breaks[1:(length(breaks) - 1)], 0, breaks[2:length(breaks)], counts,
+                                     col = lgreen, border=NA))
                 axis(1, at = Lxticks, labels = F)
                 ## X proposer
-                if(proptype=='sequential') {
+                if(proptype=='sequential' & shPropKern) {
                     valSeq <- seq(Lxlim[1],Lxlim[2], l = 1000)
                     densSeq <- dnorm(valSeq, log(lastParms[1]), sd = proposer$sdProps[1])
                     propDens <- dnorm(log(proposal[1]), log(lastParms[1]), proposer$sdProps[1])
@@ -387,9 +392,11 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                     polygon(valSeqP, densSeqP, col = makeTransparent(propDistCol, alpha = 100), border=NA)
                     accepted <- newParms[2]==proposal[2]
                     if(accepted) ltyProp <- 1 else ltyProp <- 3
-                    segments(log(lastParms[1]), max(densSeqP), log(lastParms[1]), min(densSeqP),
-                             col = curCol, lwd = 3)
-                    if(onpar==2) segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep,
+                    if(shCurr)
+                        segments(log(lastParms[1]), max(densSeqP), log(lastParms[1]), min(densSeqP),
+                                 col = curCol, lwd = 3)
+                    if(onpar==2 & shProp & bb==2)
+                        segments(log(proposal[1]), -dep, log(proposal[1]), -propDens*scl-dep,
                            col = propCol, lty = ltyProp, lwd = 3)
                     par(xpd=T)
                 }
@@ -420,7 +427,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
             par(mar=c(6,lmar,.7,22))
             plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.45),
                  col='white', lwd = ts.lwd, mgp = c(4,3,0))
-            if(shLast) 
+            if(shCurr) 
                 lines(lastParmsDat$time, lastParmsDat$I, col = curCol, lwd = ts.lwd)
             accepted <- sum(newParms!=proposal)==0
             ltyProp <- ifelse(accepted,1,3)

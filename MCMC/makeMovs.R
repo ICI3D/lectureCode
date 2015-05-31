@@ -88,19 +88,27 @@ saveVideo({
 
 set.seed(4)
 ## Bivariate sequential sampler
-nm <- paste0('movies/','HIV-seq', '.mov')
+nm <- paste0('movies/','HIV-BivariateSeq', '.mov')
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
     ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1
                 , proposer = sequential.proposer(sdProps=c(.15,.15))
-                , plotter = plotterParmDens, randInit = T, niter = 30, nburn = 0, verbose=0, plotNM=NULL)
+                , plotter = plotterParmDens, randInit = T, niter = 1200, nburn = 0, verbose=0, plotNM=NULL)
 },
           video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
-
-samp <- mcmcSampler(c(alpha=5, Beta=.4), ref.params=disease_params(), obsDat, seed = 1, proposer = sequential.proposer(sdProps=c(.15,.15)),
-                plotter = plotterParmDens, randInit = F, niter = 40, nburn = 0, verbose=0, plotNM=NULL)
+## Stills for sequential sampler
+for(rr in 1:6) {
+    png(paste0('movies/BivariateSeqStills/BivariateSeq-',rr,'.png'), width = 700*resScl, height = 700*resScl) #
+    set.seed(4)
+    mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1
+              , proposer = sequential.proposer(sdProps=c(.15,.15))
+              , plotter = plotterParmDens, randInit = T, niter = 2, nburn = 0, verbose=0, plotNM=NULL
+               ,showing = showingFXN(shDat=rr>1, shCurr=rr>2, shLast = rr>2, shPropKern =rr>3, shProp=rr>4,
+                    shHist=rr>5, shPost=F, shAratio = F))
+    dev.off()
+}
 
 ## Block sampler
 nm <- paste0('movies/','HIV-block', '.mov')
