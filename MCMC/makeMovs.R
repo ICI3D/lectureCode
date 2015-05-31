@@ -9,7 +9,6 @@ ffp <- paste0(ff, '-UnifProp')
 nits <- 3000
 hw <- .5
 
-
 ####################################################################################################
 ## Univariate Sampling
 ####################################################################################################
@@ -99,10 +98,11 @@ set.seed(7)
 nm <- paste0('movies/','HIV-BivariateSeq', '.mov')
 if(file.exists(nm)) file.remove(nm)
 saveVideo({
-    ani.options(interval = 0.02, nmax = 300, ani.dev='png', ani.type='png')
+    ani.options(interval = 0.5, nmax = 300, ani.dev='png', ani.type='png')
     mcmcSampler(c(alpha=8, Beta=.9), ref.params=disease_params(), obsDat, seed = 1
                 , proposer = sequential.proposer(sdProps=c(.15,.15)),
-                , plotter = plotterParmDens, randInit = T, niter = 1200, nburn = 0, verbose=0, plotNM=NULL)
+                , plotterLoops = list(repeats = c(10, 1), breaks=c(3, 100))
+                , plotter = plotterParmDens, randInit = T, niter = 10, nburn = 0, verbose=0, plotNM=NULL)
 },
           video.name = nm, other.opts = "-b 3000k -pix_fmt yuv420p", ani.width = 700*resScl, ani.height = 700*resScl)
 
