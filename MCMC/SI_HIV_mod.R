@@ -45,6 +45,14 @@ SImod <- function(tt, yy, parms) with(parms, {
     return(list(deriv))
 })
 
+simEpidemic <- function(init, tseq, SImod=SImod, parms = disease_params()) {
+    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms= parms))
+    simDat$I <- rowSums(simDat[, Is])
+    simDat$N <- rowSums(simDat[, c('S',Is)])
+    simDat$P <- with(simDat, I/N)
+    simDat
+}
+
 sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep(80, length(tseq)), verbose=0) {
     if(verbose>0) browser()
     simDat$I <- rowSums(simDat[, Is])
@@ -56,12 +64,11 @@ sampleEpidemic <- function(simDat, tseq = seq(1978, 2010, by = 2), numSamp = rep
                       lci = lci, uci = uci))
 }
 
+
 set.seed(4)
 trueParms <- disease_params(Beta = .9, alpha = 8, progRt = 1/2.5)
-simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
-simDat$I <- rowSums(simDat[, Is])
-simDat$N <- rowSums(simDat[, c('S',Is)])
-plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
+simDat <- simEpidemic(init, tseq, SImod, parms = trueParms)
+with(simDat, plot(time, P, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red'))
 
 obsDat <- sampleEpidemic(simDat, verbose = 0)
 points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
@@ -69,10 +76,10 @@ arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('
 
 ## Log-Likelihood
 llikelihood <- function(parms = disease_params(), obsDat, verbose = 0) {
-    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
-    simDat$I <- rowSums(simDat[, Is])
+    simDat <- simEpidemic(init, tseq, SImod, parms = parms)
     if(verbose > 5) browser()
-    lls <- dbinom(obsDat$numPos, obsDat$numSamp, prob = simDat$I[simDat$time %in% obsDat$time], log = T)
+    matchedTimes <- simDat$time %in% obsDat$time
+    lls <- dbinom(obsDat$numPos, obsDat$numSamp, prob = simDat$P[matchedTimes], log = T)
     return(sum(lls))
 }
 llikelihood(obsDat=obsDat)
@@ -212,13 +219,20 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
         out <- out[1:(nrow(out)-1),,drop=F]
         parnms <- colnames(out)
         if(verbose > 7) browser()
-        
+        if(vv + 1 > every) {
+            axisNum <- floor(vv/every)
+            ##if(vv+1==every) browser()
+            tout <- out[burn:min(nrow(out), axisNum*every),]
+            xlim <- quantile(tout[,1], c(.02,.98)) * c(.7, 1/.7)
+            ylim <- quantile(tout[,2], c(.02,.98)) * c(.9, 1/.9)
+            nlevs <- round(nlevs*2.5)
+        }
         for(bb in 1:2) {
             ## Number of times to repeat each plot
-
+            #browser()
             numLoop <- ifelse(is.null(plotterLoops), 1, plotterLoops$repeats[min(which(vv <  plotterLoops$breaks))])
-            for(ll in 1:numLoop) {
 
+            for(loop in 1:(numLoop+1)) {
                 if(vv==90) save(list = ls(all.names = TRUE), file='dbg.Rdata')
                 if(vv==210) save(list = ls(all.names = TRUE), file='dbgE210.Rdata')
                 if(vv==211) save(list = ls(all.names = TRUE), file='dbgE211.Rdata')
@@ -236,14 +250,7 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                     cex.axis=1.5, cex.lab=1.5, 'las'=1, bty='n', 'mgp'=c(4,1,0), mar = c(5,6,1,2), 'ps'=ps)
                 par(mar=c(8,lmar,1,1))
                 ## rescale axes every so many iterations
-                if(vv + 1 > every & bb==1) {
-                    axisNum <- floor(vv/every)
-                    ##if(vv+1==every) browser()
-                    tout <- out[burn:min(nrow(out), axisNum*every),]
-                    xlim <- quantile(tout[,1], c(.02,.98)) * c(.7, 1/.7)
-                    ylim <- quantile(tout[,2], c(.02,.98)) * c(.9, 1/.9)
-                    nlevs <- round(nlevs*2.5)
-                }
+
                 plot(1,1, type = 'n', xlim = xlim, ylim = ylim, log = log, axes = F, xlab='',ylab='')
                 if(grepl('x',log)) {
                     xticks <- axTicks(1, axp = c(xlim, 2), log = T)
@@ -420,31 +427,28 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                 }
                 ## Time Series
                 ## True parameters
-                trueDat <- as.data.frame(lsoda(init, tseq, SImod, parms=trueParms))
-                trueDat$I <- rowSums(trueDat[, Is])
+                trueDat <- simEpidemic(init, tseq, SImod, parms=trueParms)
                 ## lastParms
                 lastParmsAll <- within(ref.params, { ## subs fitting parameters into reference parameter vector
                     for(nm in parnms) assign(nm, as.numeric(lastParms[nm]))
                     rm(nm)
                 })
-                lastParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=lastParmsAll))
-                lastParmsDat$I <- rowSums(lastParmsDat[, Is])
+                lastParmsDat <- simEpidemic(init, tseq, SImod, parms=lastParmsAll)
                 ## lastParms
                 propParmsAll <- within(ref.params, { ## subs fitting parameters into reference parameter vector
                     for(nm in parnms) assign(nm, as.numeric(proposal[nm]))
                     rm(nm)
                 })
-                propParmsDat <- as.data.frame(lsoda(init, tseq, SImod, parms=propParmsAll))
-                propParmsDat$I <- rowSums(propParmsDat[, Is])
+                propParmsDat <- simEpidemic(init, tseq, SImod, parms=propParmsAll)
                 par(mar=c(6,lmar,.7,22))
-                plot(trueDat$time, trueDat$I, xlab = '', ylab = '', type = 'l', ylim = c(0,.45),
+                plot(trueDat$time, trueDat$P, xlab = '', ylab = '', type = 'l', ylim = c(0,.45),
                      col='white', lwd = ts.lwd, mgp = c(4,3,0))
                 if(shCurr) 
-                    lines(lastParmsDat$time, lastParmsDat$I, col = curCol, lwd = ts.lwd)
+                    lines(lastParmsDat$time, lastParmsDat$P, col = curCol, lwd = ts.lwd)
                 accepted <- sum(newParms!=proposal)==0
                 ltyProp <- ifelse(accepted,1,3)
                 if(shProp) 
-                    lines(propParmsDat$time, propParmsDat$I, col = propCol, lwd = ts.lwd, lty = ltyProp)
+                    lines(propParmsDat$time, propParmsDat$P, col = propCol, lwd = ts.lwd, lty = ltyProp)
                 ## add data
                 if(shDat) {
                     points(obsDat$time, obsDat$sampPrev, col = obsCol, pch = 16, cex = 4)
@@ -469,7 +473,6 @@ plotterParmDens <- function(out, vv, ref.params=disease_params(), plotNM=NULL, o
                                                  cex = 1.5)
                 if(!is.null(plotNM)) dev.off()
 
-
                 ##             for(ll in 1:(numLoop-1)) {
                 ##  ##browser()
                 ##             dev.copy(png)
@@ -487,9 +490,8 @@ plotterTS <- function(fit.params=NULL, ref.params=disease_params(), plotNM=NULL,
         rm(nm)
     })
     ## simulate model
-    simDat <- as.data.frame(lsoda(init, tseq, SImod, parms=parms))
-    simDat$I <- rowSums(simDat[, Is])
-    plot(simDat$time, simDat$I, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
+    simDat <- simEpidemic(init, tseq, SImod, parms=parms)
+    plot(simDat$time, simDat$P, xlab = '', ylab = 'prevalence', type = 'l', ylim = c(0,.4), col='red')
     ## add data
     points(obsDat$time, obsDat$sampPrev, col = 'red', pch = 16, cex = 2)
     arrows(obsDat$time, obsDat$uci, obsDat$time, obsDat$lci, col = makeTransparent('red'), len = .025, angle = 90, code = 3)
