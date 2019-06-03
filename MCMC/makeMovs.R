@@ -1,4 +1,3 @@
-setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('BinomMCMC.R')
 source('SI_HIV_mod.R')
 

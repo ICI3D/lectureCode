@@ -1,5 +1,5 @@
 library(deSolve); library(ggplot2); library(MASS); library(sfsmisc); library(mnormt); library(ellipse); library(emdbook)
-setwd('~/Documents/R Repos/lectureCode/MCMC/')
+
 source('utilityFxns.R')
 
 opar <- par(bg=backCol,fg=mainCol, lwd=2, col.axis=mainCol, col.lab=mainCol, col = mainCol, col.main=mainCol, 

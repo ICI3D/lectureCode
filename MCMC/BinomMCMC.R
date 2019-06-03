@@ -1,6 +1,7 @@
 library(boot); library(parallel); library(animation); library(coda)
-setwd('~/Documents/R Repos/lectureCode/MCMC/')
+## setwd('~/Documents/R Repos/lectureCode/MCMC/')
 source('utilityFxns.R')
+
 ## ##################################################
 ## ## Plotting parameters
 ## fgcol <- 'white'
